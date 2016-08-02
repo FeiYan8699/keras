@@ -178,6 +178,8 @@ class ImageDataGenerator(object):
         samplewise_center: set each sample mean to 0.
         featurewise_std_normalization: divide inputs by std of the dataset.
         samplewise_std_normalization: divide each input by its std.
+        featurewise_standardize_axis: axis along which to perform feature-wise center and std normalization.
+        samplewise_standardize_axis: axis along which to to perform sample-wise center and std normalization.
         zca_whitening: apply ZCA whitening.
         rotation_range: degrees (0 to 180).
         width_shift_range: fraction of total width.
@@ -194,6 +196,9 @@ class ImageDataGenerator(object):
             'constant'. Default is 0.
         horizontal_flip: whether to randomly flip images horizontally.
         vertical_flip: whether to randomly flip images vertically.
+        random_transform_seed: random seed for reproducible random spatial		
+            transformation. If not None, it will also be used by `flow` or		
+            `flow_from_directory` in case of no seed is set.
         rescale: rescaling factor. If None or 0, no rescaling is applied,
             otherwise we multiply the data by the value provided (before applying
             any other transformation).
@@ -208,18 +213,20 @@ class ImageDataGenerator(object):
                  samplewise_center=False,
                  featurewise_std_normalization=False,
                  samplewise_std_normalization=False,
+                 featurewise_standardize_axis=None,
+                 samplewise_standardize_axis=None,
                  zca_whitening=False,
                  rotation_range=0.,
                  width_shift_range=0.,
                  height_shift_range=0.,
                  shear_range=0.,
                  zoom_range=0.,
-                 random_transform_seed=None,
                  channel_shift_range=0.,
                  fill_mode='nearest',
                  cval=0.,
                  horizontal_flip=False,
                  vertical_flip=False,
+                 random_transform_seed=None,
                  rescale=None,
                  preprocessing=None,
                  dim_ordering=K.image_dim_ordering()):
@@ -243,7 +250,13 @@ class ImageDataGenerator(object):
             self.channel_index = 3
             self.row_index = 1
             self.col_index = 2
-
+        self.featurewise_standardize_axis = featurewise_standardize_axis or 0		
+        assert self.featurewise_standardize_axis == 0 or 0 in self.featurewise_standardize_axis, 'feature-wise standardize axis should include 0'		
+        self.samplewise_standardize_axis = samplewise_standardize_axis or self.channel_index		
+        if type(self.samplewise_standardize_axis) is int:		
+            self.samplewise_standardize_axis = (self.samplewise_standardize_axis)		
+        assert not 0 in self.samplewise_standardize_axis, 'sample-wise standardize axis should not include 0'
+        
         self.random_transform_seed = random_transform_seed
         if np.isscalar(zoom_range):
             self.zoom_range = [1 - zoom_range, 1 + zoom_range]
@@ -282,11 +295,11 @@ class ImageDataGenerator(object):
         if self.rescale:
             x *= self.rescale
         # x is a single image, so it doesn't have image number at index 0
-        img_channel_index = self.channel_index - 1
+        standardize_axis = (axis - 1 for axis in self.samplewise_standardize_axis)
         if self.samplewise_center:
-            x -= np.mean(x, axis=img_channel_index, keepdims=True)
+            x -= np.mean(x, axis=standardize_axis, keepdims=True)
         if self.samplewise_std_normalization:
-            x /= (np.std(x, axis=img_channel_index, keepdims=True) + 1e-7)
+            x /= (np.std(x, axis=standardize_axis, keepdims=True) + 1e-7)
 
         if self.featurewise_center:
             x -= self.mean
@@ -396,11 +409,13 @@ class ImageDataGenerator(object):
             X = aX
 
         if self.featurewise_center:
-            self.mean = np.mean(X, axis=0)
+            self.mean = np.mean(X, axis=self.featurewise_standardize_axis, keepdims=True)
+            self.mean = np.squeeze(self.mean, axis=0)
             X -= self.mean
 
         if self.featurewise_std_normalization:
-            self.std = np.std(X, axis=0)
+            self.std = np.std(X, axis=self.featurewise_standardize_axis, keepdims=True)
+            self.std = np.squeeze(self.std, axis=0)
             X /= (self.std + 1e-7)
 
         if self.zca_whitening:
