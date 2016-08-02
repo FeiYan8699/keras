@@ -535,8 +535,8 @@ class NumpyArrayIterator(Iterator):
 class DirectoryIterator(Iterator):
 
     def __init__(self, directory, image_data_generator,
-                 image_reader="pil", target_size=None,
-                 target_mode=None, read_formats={'png','jpg','jpeg','bmp'},
+                 image_reader="pil", read_formats={'png','jpg','jpeg','bmp'},
+                 target_size=None, target_mode=None,
                  dim_ordering=K.image_dim_ordering,
                  classes=None, class_mode='categorical',
                  batch_size=32, shuffle=True, seed=None,
