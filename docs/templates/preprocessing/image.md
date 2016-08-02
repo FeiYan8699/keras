@@ -6,6 +6,8 @@ keras.preprocessing.image.ImageDataGenerator(featurewise_center=False,
     samplewise_center=False,
     featurewise_std_normalization=False,
     samplewise_std_normalization=False,
+    featurewise_standardize_axis=None,
+    samplewise_standardize_axis=None,
     zca_whitening=False,
     rotation_range=0.,
     width_shift_range=0.,
@@ -17,6 +19,7 @@ keras.preprocessing.image.ImageDataGenerator(featurewise_center=False,
     cval=0.,
     horizontal_flip=False,
     vertical_flip=False,
+    random_transform_seed=None,
     rescale=None,
     dim_ordering=K.image_dim_ordering())
 ```
@@ -28,6 +31,8 @@ Generate batches of tensor image data with real-time data augmentation. The data
     - __samplewise_center__: Boolean. Set each sample mean to 0.
     - __featurewise_std_normalization__: Boolean. Divide inputs by std of the dataset.
     - __samplewise_std_normalization__: Boolean. Divide each input by its std.
+    - __featurewise_standardize_axis__: Int or tuple of integers. Axis along which to perform feature-wise center and std normalization.
+    - __samplewise_standardize_axis__: Int or tuple of integers. Axis along which to to perform sample-wise center and std normalization.
     - __zca_whitening__: Boolean. Apply ZCA whitening.
     - __rotation_range__: Int. Degree range for random rotations.
     - __width_shift_range__: Float (fraction of total width). Range for random horizontal shifts.
@@ -39,6 +44,8 @@ Generate batches of tensor image data with real-time data augmentation. The data
     - __cval__: Float or Int. Value used for points outside the boundaries when `fill_mode = "constant"`.
     - __horizontal_flip__: Boolean. Randomly flip inputs horizontally.
     - __vertical_flip__: Boolean. Randomly flip inputs vertically.
+    - __random_transform_seed__: Int. random seed for reproducible random spatial transformation.
+            If not None, it will also be used by `flow` or `flow_from_directory` in case of no seed is set.
     - __rescale__: rescaling factor. Defaults to None. If None or 0, no rescaling is applied,
             otherwise we multiply the data by the value provided (before applying
             any other transformation).
@@ -62,17 +69,20 @@ Generate batches of tensor image data with real-time data augmentation. The data
             - __y__: labels.
             - __batch_size__: int (default: 32).
             - __shuffle__: boolean (defaut: False).
+            - __seed__: optional random seed for shuffling.
             - __save_to_dir__: None or str (default: None). This allows you to optimally specify a directory to which to save the augmented pictures being generated (useful for visualizing what you are doing).
             - __save_prefix__: str (default: `''`). Prefix to use for filenames of saved pictures (only relevant if `save_to_dir` is set).
-            - __save_format__: one of "png", "jpeg" (only relevant if `save_to_dir` is set). Default: "jpeg".
+            - __save_mode__: str (default: `None`). PIL image mode to use for converting the image array to image object for save (e.g. `"L", "RGB", "RGBA", "F"`, only relevant if `save_to_dir` is set). It should match with the produced image array channel size and data type.
+            - __save_format__: any format supported by PIL such as "png" and "jpeg" (only relevant if `save_to_dir` is set). It should match with `save_mode`. Default: "jpeg".
         - ___yields__: Tuples of `(x, y)` where `x` is a numpy array of image data and `y` is a numpy array of corresponding labels.
             The generator loops indefinitely.
     - __flow_from_directory(directory)__: Takes the path to a directory, and generates batches of augmented/normalized data. Yields batches indefinitely, in an infinite loop.
         - __Arguments__:
-            - __directory: path to the target directory. It should contain one subdirectory per class,
+            - __directory__: path to the target directory. It should contain one subdirectory per class,
                 and the subdirectories should contain PNG or JPG images. See [this script](https://gist.github.com/fchollet/0830affa1f7f19fd47b06d4cf89ed44d) for more details.
-            - __target_size__: tuple of integers, default: `(256, 256)`. The dimensions to which all images found will be resized.
-            - __color_mode__: one of "grayscale", "rbg". Default: "rgb". Whether the images will be converted to have 1 or 3 color channels.
+            - __image_reader__: "pil" or a function. Default: "pil". A function which read file and return an image array, if equals to "pil", PIL will be used to read files and then convert into numpy arrays.
+            - __target_size__: tuple of integers, default: `(256, 256)`. The dimensions to which all images found will be resized (only relevant if `image_reader == "pil"`).
+            - __image_mode__: PIL image mode to use before convert to a numpy array (e.g. `"L", "RGB", "RGBA", "F"`). (only relevant if `image_reader == "pil"`).
             - __classes__: optional list of class subdirectories (e.g. `['dogs', 'cats']`). Default: None. If not provided, the list of classes will be automatically inferred (and the order of the classes, which will map to the label indices, will be alphanumeric).
             - __class_mode__: one of "categorical", "binary", "sparse" or None. Default: "categorical". Determines the type of label arrays that are returned: "categorical" will be 2D one-hot encoded labels, "binary" will be 1D binary labels, "sparse" will be 1D integer labels. If None, no labels are returned (the generator will only yield batches of image data, which is useful to use `model.predict_generator()`, `model.evaluate_generator()`, etc.).
             - __batch_size__: size of the batches of data (default: 32).
@@ -80,7 +90,8 @@ Generate batches of tensor image data with real-time data augmentation. The data
             - __seed__: optional random seed for shuffling.
             - __save_to_dir__: None or str (default: None). This allows you to optimally specify a directory to which to save the augmented pictures being generated (useful for visualizing what you are doing).
             - __save_prefix__: str. Prefix to use for filenames of saved pictures (only relevant if `save_to_dir` is set).
-            - __save_format__: one of "png", "jpeg" (only relevant if `save_to_dir` is set). Default: "jpeg".
+            - __save_mode__: str (default: `None`). PIL image mode to use for converting the image array to image object for save (e.g. `"L", "RGB", "RGBA", "F"`, only relevant if `save_to_dir` is set). It should match with the produced image array channel size and data type.
+            - __save_format__: any format supported by PIL such as "png" and "jpeg" (only relevant if `save_to_dir` is set). It should match with `save_mode`. Default: "jpeg".
 
 
 - __Examples__:
@@ -88,13 +99,14 @@ Generate batches of tensor image data with real-time data augmentation. The data
 Example of using `.flow(X, y)`:
 
 ```python
-(X_train, y_train), (X_test, y_test) = cifar10.load_data(test_split=0.1)
+(X_train, y_train), (X_test, y_test) = cifar10.load_data()
 Y_train = np_utils.to_categorical(y_train, nb_classes)
 Y_test = np_utils.to_categorical(y_test, nb_classes)
 
 datagen = ImageDataGenerator(
     featurewise_center=True,
     featurewise_std_normalization=True,
+    featurewise_standardize_axis=(0, 2, 3),
     rotation_range=20,
     width_shift_range=0.2,
     height_shift_range=0.2,
@@ -135,12 +147,14 @@ test_datagen = ImageDataGenerator(rescale=1./255)
 train_generator = train_datagen.flow_from_directory(
         'data/train',
         target_size=(150, 150),
+        image_mode='RGB',
         batch_size=32,
         class_mode='binary')
 
 validation_generator = test_datagen.flow_from_directory(
         'data/validation',
         target_size=(150, 150),
+        image_mode='RGB',
         batch_size=32,
         class_mode='binary')
 
