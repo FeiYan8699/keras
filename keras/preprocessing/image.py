@@ -180,8 +180,8 @@ class ImageDataGenerator(object):
         samplewise_center: set each sample mean to 0.
         featurewise_std_normalization: divide inputs by std of the dataset.
         samplewise_std_normalization: divide each input by its std.
-        featurewise_standardize_axis: axis along which to perform feature-wise center and std normalization
-        samplewise_standardize_axis: axis along which to to perform sample-wise center and std normalization
+        featurewise_standardize_axis: axis along which to perform feature-wise center and std normalization.
+        samplewise_standardize_axis: axis along which to to perform sample-wise center and std normalization.
         zca_whitening: apply ZCA whitening.
         rotation_range: degrees (0 to 180).
         width_shift_range: fraction of total width.
@@ -198,6 +198,9 @@ class ImageDataGenerator(object):
             'constant'. Default is 0.
         horizontal_flip: whether to randomly flip images horizontally.
         vertical_flip: whether to randomly flip images vertically.
+        random_transform_seed: random seed for reproducible random spatial
+            transformation. If not None, it will also used by `flow` or
+            `flow_from_directory` in case of no seed is set.
         rescale: rescaling factor. If None or 0, no rescaling is applied,
             otherwise we multiply the data by the value provided (before applying
             any other transformation).
@@ -220,12 +223,12 @@ class ImageDataGenerator(object):
                  height_shift_range=0.,
                  shear_range=0.,
                  zoom_range=0.,
-                 random_transform_seed=None,
                  channel_shift_range=0.,
                  fill_mode='nearest',
                  cval=0.,
                  horizontal_flip=False,
                  vertical_flip=False,
+                 random_transform_seed=None,
                  rescale=None,
                  dim_ordering=K.image_dim_ordering()):
         self.__dict__.update(locals())
