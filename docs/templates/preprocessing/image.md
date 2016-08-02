@@ -21,6 +21,7 @@ keras.preprocessing.image.ImageDataGenerator(featurewise_center=False,
     vertical_flip=False,
     random_transform_seed=None,
     rescale=None,
+    preprocessing=None,
     dim_ordering=K.image_dim_ordering())
 ```
 
