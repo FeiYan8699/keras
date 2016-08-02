@@ -250,12 +250,18 @@ class ImageDataGenerator(object):
             self.channel_index = 3
             self.row_index = 1
             self.col_index = 2
-        self.featurewise_standardize_axis = featurewise_standardize_axis or 0		
-        assert self.featurewise_standardize_axis == 0 or 0 in self.featurewise_standardize_axis, 'feature-wise standardize axis should include 0'		
-        self.samplewise_standardize_axis = samplewise_standardize_axis or self.channel_index		
-        if type(self.samplewise_standardize_axis) is int:		
-            self.samplewise_standardize_axis = (self.samplewise_standardize_axis)		
-        assert not 0 in self.samplewise_standardize_axis, 'sample-wise standardize axis should not include 0'
+
+        featurewise_standardize_axis = featurewise_standardize_axis or 0
+        if type(featurewise_standardize_axis) is int:
+            featurewise_standardize_axis = (featurewise_standardize_axis, )
+        assert 0 in featurewise_standardize_axis, 'feature-wise standardize axis should include 0'		
+        self.featurewise_standardize_axis = featurewise_standardize_axis
+        
+        samplewise_standardize_axis = samplewise_standardize_axis or self.channel_index
+        if type(samplewise_standardize_axis) is int:
+            samplewise_standardize_axis = (samplewise_standardize_axis, )
+        assert not 0 in samplewise_standardize_axis, 'sample-wise standardize axis should not include 0'
+        self.samplewise_standardize_axis = samplewise_standardize_axis
         
         self.random_transform_seed = random_transform_seed
         if np.isscalar(zoom_range):
