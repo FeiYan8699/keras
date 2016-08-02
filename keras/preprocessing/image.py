@@ -283,7 +283,8 @@ class ImageDataGenerator(object):
             save_mode=save_mode, save_format=save_format)
 
     def flow_from_directory(self, directory,
-                            image_reader='pil', target_size=None, target_mode=None,
+                            image_reader='pil', target_size=None,
+                            target_mode=None, read_formats={'png','jpg','jpeg','bmp'},
                             classes=None, class_mode='categorical',
                             batch_size=32, shuffle=True, seed=None,
                             save_to_dir=None, save_prefix='',
