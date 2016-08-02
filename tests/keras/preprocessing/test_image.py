@@ -47,6 +47,7 @@ class TestImage:
                 height_shift_range=0.1,
                 shear_range=0.5,
                 zoom_range=0.2,
+                random_transform_seed=1,
                 channel_shift_range=0.,
                 fill_mode='nearest',
                 cval=0.5,

@@ -118,7 +118,7 @@ def flip_axis(x, axis):
     return x
 
 
-def array_to_img(x, dim_ordering=K.image_dim_ordering(), scale=True):
+def array_to_img(x, dim_ordering=K.image_dim_ordering(), mode=None, scale=True):
     from PIL import Image
     if dim_ordering == 'th':
         x = x.transpose(1, 2, 0)
@@ -126,14 +126,14 @@ def array_to_img(x, dim_ordering=K.image_dim_ordering(), scale=True):
         x += max(-np.min(x), 0)
         x /= np.max(x)
         x *= 255
-    if x.shape[2] == 3:
-        # RGB
-        return Image.fromarray(x.astype('uint8'), 'RGB')
-    elif x.shape[2] == 1:
-        # grayscale
-        return Image.fromarray(x[:, :, 0].astype('uint8'), 'L')
+    if x.shape[2] == 3 and mode == 'RGB':
+        return Image.fromarray(x.astype('uint8'), mode)
+    elif x.shape[2] == 1 and mode == 'L':
+        return Image.fromarray(x[:, :, 0].astype('uint8'), mode)
+    elif mode:
+        return Image.fromarray(x, mode)
     else:
-        raise Exception('Unsupported channel number: ', x.shape[2])
+        raise Exception('Unsupported array shape: ', x.shape)
 
 
 def img_to_array(img, dim_ordering=K.image_dim_ordering()):
@@ -154,19 +154,17 @@ def img_to_array(img, dim_ordering=K.image_dim_ordering()):
     return x
 
 
-def load_img(path, grayscale=False, target_size=None):
+def load_img(path, mode=None, target_size=None):
     from PIL import Image
     img = Image.open(path)
-    if grayscale:
-        img = img.convert('L')
-    else:  # Ensure 3 channel even when loaded image is grayscale
-        img = img.convert('RGB')
+    if mode:
+        img = img.convert(mode)
     if target_size:
         img = img.resize((target_size[1], target_size[0]))
     return img
 
 
-def list_pictures(directory, ext='jpg|jpeg|bmp|png'):
+def list_pictures(directory, ext='jpg|jpeg|bmp|png|gif|tiff|tif'):
     return [os.path.join(directory, f) for f in os.listdir(directory)
             if os.path.isfile(os.path.join(directory, f)) and re.match('([\w]+\.(?:' + ext + '))', f)]
 
@@ -223,12 +221,14 @@ class ImageDataGenerator(object):
                  horizontal_flip=False,
                  vertical_flip=False,
                  rescale=None,
+                 preprocessing=None,
                  dim_ordering=K.image_dim_ordering()):
         self.__dict__.update(locals())
         self.mean = None
         self.std = None
         self.principal_components = None
         self.rescale = rescale
+        self.preprocessing = preprocessing
 
         if dim_ordering not in {'tf', 'th'}:
             raise Exception('dim_ordering should be "tf" (channel after row and '
@@ -255,25 +255,28 @@ class ImageDataGenerator(object):
                             'Received arg: ', zoom_range)
 
     def flow(self, X, y=None, batch_size=32, shuffle=True, seed=None,
-             save_to_dir=None, save_prefix='', save_format='jpeg'):
+             save_to_dir=None, save_prefix='', save_mode=None, save_format='jpeg'):
         return NumpyArrayIterator(
             X, y, self,
             batch_size=batch_size, shuffle=shuffle, seed=seed,
             dim_ordering=self.dim_ordering,
-            save_to_dir=save_to_dir, save_prefix=save_prefix, save_format=save_format)
+            save_to_dir=save_to_dir, save_prefix=save_prefix,
+            save_mode=save_mode, save_format=save_format)
 
     def flow_from_directory(self, directory,
-                            target_size=(256, 256), color_mode='rgb',
+                            file_reader='pil', target_size=None, read_mode=None,
                             classes=None, class_mode='categorical',
                             batch_size=32, shuffle=True, seed=None,
-                            save_to_dir=None, save_prefix='', save_format='jpeg'):
+                            save_to_dir=None, save_prefix='',
+                            save_mode=None, save_format='jpeg'):
         return DirectoryIterator(
             directory, self,
-            target_size=target_size, color_mode=color_mode,
+            file_reader=file_reader, target_size=target_size, read_mode=read_mode,
             classes=classes, class_mode=class_mode,
             dim_ordering=self.dim_ordering,
             batch_size=batch_size, shuffle=shuffle, seed=seed,
-            save_to_dir=save_to_dir, save_prefix=save_prefix, save_format=save_format)
+            save_to_dir=save_to_dir, save_prefix=save_prefix,
+            save_mode=save_mode, save_format=save_format)
 
     def standardize(self, x):
         if self.rescale:
@@ -378,11 +381,17 @@ class ImageDataGenerator(object):
                 how many augmentation passes to do over the data
             seed: random seed.
         '''
-        X = np.copy(X)
+        X = np.copy(X).astype('float32')
         if augment:
-            aX = np.zeros(tuple([rounds * X.shape[0]] + list(X.shape)[1:]))
+            if self.preprocessing:
+                image_shape = self.preprocessing(X[0]).shape
+            else:
+                image_shape = X[0].shape
+            aX = np.zeros((rounds * X.shape[0],) + image_shape)
             for r in range(rounds):
                 for i in range(X.shape[0]):
+                    if self.preprocessing:
+                        X[i] = self.preprocessing(X[i])
                     aX[i + r * X.shape[0]] = self.random_transform(X[i])
             X = aX
 
@@ -451,7 +460,7 @@ class NumpyArrayIterator(Iterator):
     def __init__(self, X, y, image_data_generator,
                  batch_size=32, shuffle=False, seed=None,
                  dim_ordering=K.image_dim_ordering(),
-                 save_to_dir=None, save_prefix='', save_format='jpeg'):
+                 save_to_dir=None, save_prefix='', save_mode=None, save_format='jpeg'):
         if y is not None and len(X) != len(y):
             raise Exception('X (images tensor) and y (labels) '
                             'should have the same length. '
@@ -462,7 +471,12 @@ class NumpyArrayIterator(Iterator):
         self.dim_ordering = dim_ordering
         self.save_to_dir = save_to_dir
         self.save_prefix = save_prefix
+        self.save_mode = save_mode
         self.save_format = save_format
+        if self.image_data_generator.preprocessing:
+            self.image_shape = self.image_data_generator.preprocessing(X[0]).shape
+        else:
+            self.image_shape = X[0].shape
         seed = seed or image_data_generator.random_transform_seed
         super(NumpyArrayIterator, self).__init__(X.shape[0], batch_size, shuffle, seed)
 
@@ -474,15 +488,17 @@ class NumpyArrayIterator(Iterator):
         with self.lock:
             index_array, current_index, current_batch_size = next(self.index_generator)
         # The transformation of images is not under thread lock so it can be done in parallel
-        batch_x = np.zeros(tuple([current_batch_size] + list(self.X.shape)[1:]))
+        batch_x = np.zeros((current_batch_size,) + self.image_shape)
         for i, j in enumerate(index_array):
             x = self.X[j]
+            if self.image_data_generator.preprocessing:
+                x = self.image_data_generator.preprocessing(x)
             x = self.image_data_generator.random_transform(x.astype('float32'))
             x = self.image_data_generator.standardize(x)
             batch_x[i] = x
         if self.save_to_dir:
             for i in range(current_batch_size):
-                img = array_to_img(batch_x[i], self.dim_ordering, scale=True)
+                img = array_to_img(batch_x[i], self.dim_ordering, mode=self.save_mode, scale=True)
                 fname = '{prefix}_{index}_{hash}.{format}'.format(prefix=self.save_prefix,
                                                                   index=current_index + i,
                                                                   hash=np.random.randint(1e4),
@@ -497,29 +513,17 @@ class NumpyArrayIterator(Iterator):
 class DirectoryIterator(Iterator):
 
     def __init__(self, directory, image_data_generator,
-                 target_size=(256, 256), color_mode='rgb',
+                 file_reader="pil", target_size=None, read_mode=None,
                  dim_ordering=K.image_dim_ordering,
                  classes=None, class_mode='categorical',
                  batch_size=32, shuffle=True, seed=None,
-                 save_to_dir=None, save_prefix='', save_format='jpeg'):
+                 save_to_dir=None, save_prefix='', save_mode=None, save_format='jpeg'):
         self.directory = directory
         self.image_data_generator = image_data_generator
-        self.target_size = tuple(target_size)
-        if color_mode not in {'rgb', 'grayscale'}:
-            raise ValueError('Invalid color mode:', color_mode,
-                             '; expected "rgb" or "grayscale".')
-        self.color_mode = color_mode
+        self.file_reader = file_reader
+        self.target_size = target_size
+        self.read_mode = read_mode
         self.dim_ordering = dim_ordering
-        if self.color_mode == 'rgb':
-            if self.dim_ordering == 'tf':
-                self.image_shape = self.target_size + (3,)
-            else:
-                self.image_shape = (3,) + self.target_size
-        else:
-            if self.dim_ordering == 'tf':
-                self.image_shape = self.target_size + (1,)
-            else:
-                self.image_shape = (1,) + self.target_size
         self.classes = classes
         if class_mode not in {'categorical', 'binary', 'sparse', None}:
             raise ValueError('Invalid class_mode:', class_mode,
@@ -528,9 +532,10 @@ class DirectoryIterator(Iterator):
         self.class_mode = class_mode
         self.save_to_dir = save_to_dir
         self.save_prefix = save_prefix
+        self.save_mode = save_mode
         self.save_format = save_format
 
-        white_list_formats = {'png', 'jpg', 'jpeg', 'bmp'}
+        white_list_formats = {'png', 'jpg', 'jpeg', 'bmp', 'gif', 'tiff', 'tif'}
 
         # first, count the number of samples and classes
         self.nb_sample = 0
@@ -550,6 +555,7 @@ class DirectoryIterator(Iterator):
                 for extension in white_list_formats:
                     if fname.lower().endswith('.' + extension):
                         is_valid = True
+                        self.save_format = self.save_format or extension
                         break
                 if is_valid:
                     self.nb_sample += 1
@@ -571,27 +577,42 @@ class DirectoryIterator(Iterator):
                     self.classes[i] = self.class_indices[subdir]
                     self.filenames.append(os.path.join(subdir, fname))
                     i += 1
+
+        # read one image to get the real image shape
+        fname = self.filenames[0]
+        if self.file_reader == 'pil':
+            self.file_reader = self.pil_file_reader
+
+        x = self.file_reader(os.path.join(self.directory, fname))
+        if self.image_data_generator.preprocessing:
+            x = self.image_data_generator.preprocessing(x)
+        self.image_shape = x.shape
+
         seed = seed or image_data_generator.random_transform_seed
         super(DirectoryIterator, self).__init__(self.nb_sample, batch_size, shuffle, seed)
+
+    def pil_file_reader(self, filepath):
+        img = load_img(filepath, mode=self.read_mode, target_size=self.target_size)
+        return img_to_array(img, dim_ordering=self.dim_ordering)
 
     def next(self):
         with self.lock:
             index_array, current_index, current_batch_size = next(self.index_generator)
         # The transformation of images is not under thread lock so it can be done in parallel
         batch_x = np.zeros((current_batch_size,) + self.image_shape)
-        grayscale = self.color_mode == 'grayscale'
         # build batch of image data
         for i, j in enumerate(index_array):
             fname = self.filenames[j]
-            img = load_img(os.path.join(self.directory, fname), grayscale=grayscale, target_size=self.target_size)
-            x = img_to_array(img, dim_ordering=self.dim_ordering)
+            x = self.file_reader(os.path.join(self.directory, fname))
+            if self.image_data_generator.preprocessing:
+                x = self.image_data_generator.preprocessing(x)
             x = self.image_data_generator.random_transform(x)
             x = self.image_data_generator.standardize(x)
             batch_x[i] = x
         # optionally save augmented images to disk for debugging purposes
         if self.save_to_dir:
             for i in range(current_batch_size):
-                img = array_to_img(batch_x[i], self.dim_ordering, scale=True)
+                img = array_to_img(batch_x[i], self.dim_ordering, mode=self.save_mode, scale=True)
                 fname = '{prefix}_{index}_{hash}.{format}'.format(prefix=self.save_prefix,
                                                                   index=current_index + i,
                                                                   hash=np.random.randint(1e4),
