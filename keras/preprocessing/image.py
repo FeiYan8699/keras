@@ -210,6 +210,7 @@ class ImageDataGenerator(object):
                  samplewise_center=False,
                  featurewise_std_normalization=False,
                  samplewise_std_normalization=False,
+                 standardize_axis=None,
                  zca_whitening=False,
                  rotation_range=0.,
                  width_shift_range=0.,
@@ -243,6 +244,9 @@ class ImageDataGenerator(object):
             self.channel_index = 3
             self.row_index = 1
             self.col_index = 2
+        self.standardize_axis = standardize_axis or (self.row_index, self.col_index)
+        if type(self.standardize_axis) is int:
+            self.standardize_axis = (self.standardize_axis)
 
         self.random_transform_seed = random_transform_seed
         if np.isscalar(zoom_range):
@@ -279,11 +283,11 @@ class ImageDataGenerator(object):
         if self.rescale:
             x *= self.rescale
         # x is a single image, so it doesn't have image number at index 0
-        img_channel_index = self.channel_index - 1
+        standardize_axis = (axis - 1 for axis in self.standardize_axis)
         if self.samplewise_center:
-            x -= np.mean(x, axis=img_channel_index, keepdims=True)
+            x -= np.mean(x, axis=standardize_axis, keepdims=True)
         if self.samplewise_std_normalization:
-            x /= (np.std(x, axis=img_channel_index, keepdims=True) + 1e-7)
+            x /= (np.std(x, axis=standardize_axis, keepdims=True) + 1e-7)
 
         if self.featurewise_center:
             x -= self.mean
@@ -387,11 +391,11 @@ class ImageDataGenerator(object):
             X = aX
 
         if self.featurewise_center:
-            self.mean = np.mean(X, axis=0)
+            self.mean = np.mean(X, axis=self.standardize_axis)
             X -= self.mean
 
         if self.featurewise_std_normalization:
-            self.std = np.std(X, axis=0)
+            self.std = np.std(X, axis=self.standardize_axis)
             X /= (self.std + 1e-7)
 
         if self.zca_whitening:
