@@ -49,6 +49,8 @@ Generate batches of tensor image data with real-time data augmentation. The data
     - __rescale__: rescaling factor. Defaults to None. If None or 0, no rescaling is applied,
             otherwise we multiply the data by the value provided (before applying
             any other transformation).
+    - __preprocessing__: Function. Defaults to None. A function performs preprocessing on the image array before `random_transform` and `standardize`.
+            If set, a numpy array will be passed to the function, and the result array should be returned.
     - __dim_ordering__: One of {"th", "tf"}.
         "tf" mode means that the images should have shape `(samples, width, height, channels)`,
         "th" mode means that the images should have shape `(samples, channels, width, height)`.
@@ -80,9 +82,10 @@ Generate batches of tensor image data with real-time data augmentation. The data
         - __Arguments__:
             - __directory__: path to the target directory. It should contain one subdirectory per class,
                 and the subdirectories should contain PNG or JPG images. See [this script](https://gist.github.com/fchollet/0830affa1f7f19fd47b06d4cf89ed44d) for more details.
-            - __image_reader__: "pil" or a function. Default: "pil". A function which read file and return an image array, if equals to "pil", PIL will be used to read files and then convert into numpy arrays.
+            - __image_reader__: "pil" or a function. Default: "pil". A function which read file and return an image array, if equals to "pil", PIL will be used to read all files and then convert into numpy arrays.
             - __target_size__: tuple of integers, default: `(256, 256)`. The dimensions to which all images found will be resized (only relevant if `image_reader == "pil"`).
-            - __image_mode__: PIL image mode to use before convert to a numpy array (e.g. `"L", "RGB", "RGBA", "F"`). (only relevant if `image_reader == "pil"`).
+            - __read_formats__: set of format strings (file extensions). Default: `{'png','jpg','jpeg','bmp'}`. Files with these extensions will be fed into the `image_reader`.
+            - __target_mode__: PIL image mode which all images found will be converted (e.g. `"L", "RGB", "RGBA", "F"`,  only relevant if `image_reader == "pil"`).
             - __classes__: optional list of class subdirectories (e.g. `['dogs', 'cats']`). Default: None. If not provided, the list of classes will be automatically inferred (and the order of the classes, which will map to the label indices, will be alphanumeric).
             - __class_mode__: one of "categorical", "binary", "sparse" or None. Default: "categorical". Determines the type of label arrays that are returned: "categorical" will be 2D one-hot encoded labels, "binary" will be 1D binary labels, "sparse" will be 1D integer labels. If None, no labels are returned (the generator will only yield batches of image data, which is useful to use `model.predict_generator()`, `model.evaluate_generator()`, etc.).
             - __batch_size__: size of the batches of data (default: 32).
@@ -147,14 +150,14 @@ test_datagen = ImageDataGenerator(rescale=1./255)
 train_generator = train_datagen.flow_from_directory(
         'data/train',
         target_size=(150, 150),
-        image_mode='RGB',
+        target_mode='RGB',
         batch_size=32,
         class_mode='binary')
 
 validation_generator = test_datagen.flow_from_directory(
         'data/validation',
         target_size=(150, 150),
-        image_mode='RGB',
+        target_mode='RGB',
         batch_size=32,
         class_mode='binary')
 
