@@ -154,11 +154,11 @@ def img_to_array(img, dim_ordering=K.image_dim_ordering()):
     return x
 
 
-def load_img(path, mode=None, target_size=None):
+def load_img(path, target_mode=None, target_size=None):
     from PIL import Image
     img = Image.open(path)
-    if mode:
-        img = img.convert(mode)
+    if target_mode:
+        img = img.convert(target_mode)
     if target_size:
         img = img.resize((target_size[1], target_size[0]))
     return img
@@ -283,14 +283,14 @@ class ImageDataGenerator(object):
             save_mode=save_mode, save_format=save_format)
 
     def flow_from_directory(self, directory,
-                            image_reader='pil', target_size=None, read_mode=None,
+                            image_reader='pil', target_size=None, target_mode=None,
                             classes=None, class_mode='categorical',
                             batch_size=32, shuffle=True, seed=None,
                             save_to_dir=None, save_prefix='',
                             save_mode=None, save_format='jpeg'):
         return DirectoryIterator(
             directory, self,
-            image_reader=image_reader, target_size=target_size, read_mode=read_mode,
+            image_reader=image_reader, target_size=target_size, target_mode=target_mode,
             classes=classes, class_mode=class_mode,
             dim_ordering=self.dim_ordering,
             batch_size=batch_size, shuffle=shuffle, seed=seed,
@@ -535,7 +535,7 @@ class DirectoryIterator(Iterator):
 
     def __init__(self, directory, image_data_generator,
                  image_reader="pil", target_size=None,
-                 read_mode=None, read_formats={'png','jpg','jpeg','bmp'},
+                 target_mode=None, read_formats={'png','jpg','jpeg','bmp'},
                  dim_ordering=K.image_dim_ordering,
                  classes=None, class_mode='categorical',
                  batch_size=32, shuffle=True, seed=None,
@@ -544,7 +544,7 @@ class DirectoryIterator(Iterator):
         self.image_data_generator = image_data_generator
         self.image_reader = image_reader
         self.target_size = target_size
-        self.read_mode = read_mode
+        self.target_mode = target_mode
         self.dim_ordering = dim_ordering
         self.classes = classes
         if class_mode not in {'categorical', 'binary', 'sparse', None}:
@@ -612,7 +612,7 @@ class DirectoryIterator(Iterator):
         super(DirectoryIterator, self).__init__(self.nb_sample, batch_size, shuffle, seed)
 
     def pil_image_reader(self, filepath):
-        img = load_img(filepath, mode=self.read_mode, target_size=self.target_size)
+        img = load_img(filepath, target_mode=self.target_mode, target_size=self.target_size)
         return img_to_array(img, dim_ordering=self.dim_ordering)
 
     def next(self):
