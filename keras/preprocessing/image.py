@@ -283,14 +283,14 @@ class ImageDataGenerator(object):
             save_mode=save_mode, save_format=save_format)
 
     def flow_from_directory(self, directory,
-                            file_reader='pil', target_size=None, read_mode=None,
+                            image_reader='pil', target_size=None, read_mode=None,
                             classes=None, class_mode='categorical',
                             batch_size=32, shuffle=True, seed=None,
                             save_to_dir=None, save_prefix='',
                             save_mode=None, save_format='jpeg'):
         return DirectoryIterator(
             directory, self,
-            file_reader=file_reader, target_size=target_size, read_mode=read_mode,
+            image_reader=image_reader, target_size=target_size, read_mode=read_mode,
             classes=classes, class_mode=class_mode,
             dim_ordering=self.dim_ordering,
             batch_size=batch_size, shuffle=shuffle, seed=seed,
@@ -534,7 +534,7 @@ class NumpyArrayIterator(Iterator):
 class DirectoryIterator(Iterator):
 
     def __init__(self, directory, image_data_generator,
-                 file_reader="pil", target_size=None,
+                 image_reader="pil", target_size=None,
                  read_mode=None, read_formats={'png','jpg','jpeg','bmp'},
                  dim_ordering=K.image_dim_ordering,
                  classes=None, class_mode='categorical',
@@ -542,7 +542,7 @@ class DirectoryIterator(Iterator):
                  save_to_dir=None, save_prefix='', save_mode=None, save_format='jpeg'):
         self.directory = directory
         self.image_data_generator = image_data_generator
-        self.file_reader = file_reader
+        self.image_reader = image_reader
         self.target_size = target_size
         self.read_mode = read_mode
         self.dim_ordering = dim_ordering
@@ -600,10 +600,10 @@ class DirectoryIterator(Iterator):
 
         # read one image to get the real image shape
         fname = self.filenames[0]
-        if self.file_reader == 'pil':
-            self.file_reader = self.pil_file_reader
+        if self.image_reader == 'pil':
+            self.image_reader = self.pil_image_reader
 
-        x = self.file_reader(os.path.join(self.directory, fname))
+        x = self.image_reader(os.path.join(self.directory, fname))
         if self.image_data_generator.preprocessing:
             x = self.image_data_generator.preprocessing(x)
         self.image_shape = x.shape
@@ -611,7 +611,7 @@ class DirectoryIterator(Iterator):
         seed = seed or image_data_generator.random_transform_seed
         super(DirectoryIterator, self).__init__(self.nb_sample, batch_size, shuffle, seed)
 
-    def pil_file_reader(self, filepath):
+    def pil_image_reader(self, filepath):
         img = load_img(filepath, mode=self.read_mode, target_size=self.target_size)
         return img_to_array(img, dim_ordering=self.dim_ordering)
 
@@ -623,10 +623,10 @@ class DirectoryIterator(Iterator):
         # build batch of image data
         for i, j in enumerate(index_array):
             fname = self.filenames[j]
-            x = self.file_reader(os.path.join(self.directory, fname))
+            x = self.image_reader(os.path.join(self.directory, fname))
             if self.image_data_generator.preprocessing:
                 x = self.image_data_generator.preprocessing(x)
-            x = self.image_data_generator.random_transform(x)
+            x = self.image_data_generator.random_transform(x.astype('float32'))
             x = self.image_data_generator.standardize(x)
             batch_x[i] = x
         # optionally save augmented images to disk for debugging purposes
