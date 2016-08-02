@@ -164,7 +164,7 @@ def load_img(path, mode=None, target_size=None):
     return img
 
 
-def list_pictures(directory, ext='jpg|jpeg|bmp|png|gif|tiff|tif'):
+def list_pictures(directory, ext='jpg|jpeg|bmp|png'):
     return [os.path.join(directory, f) for f in os.listdir(directory)
             if os.path.isfile(os.path.join(directory, f)) and re.match('([\w]+\.(?:' + ext + '))', f)]
 
@@ -513,7 +513,8 @@ class NumpyArrayIterator(Iterator):
 class DirectoryIterator(Iterator):
 
     def __init__(self, directory, image_data_generator,
-                 file_reader="pil", target_size=None, read_mode=None,
+                 file_reader="pil", target_size=None,
+                 read_mode=None, read_formats={'png','jpg','jpeg','bmp'},
                  dim_ordering=K.image_dim_ordering,
                  classes=None, class_mode='categorical',
                  batch_size=32, shuffle=True, seed=None,
@@ -535,8 +536,6 @@ class DirectoryIterator(Iterator):
         self.save_mode = save_mode
         self.save_format = save_format
 
-        white_list_formats = {'png', 'jpg', 'jpeg', 'bmp', 'gif', 'tiff', 'tif'}
-
         # first, count the number of samples and classes
         self.nb_sample = 0
 
@@ -552,7 +551,7 @@ class DirectoryIterator(Iterator):
             subpath = os.path.join(directory, subdir)
             for fname in os.listdir(subpath):
                 is_valid = False
-                for extension in white_list_formats:
+                for extension in read_formats:
                     if fname.lower().endswith('.' + extension):
                         is_valid = True
                         self.save_format = self.save_format or extension
@@ -569,7 +568,7 @@ class DirectoryIterator(Iterator):
             subpath = os.path.join(directory, subdir)
             for fname in os.listdir(subpath):
                 is_valid = False
-                for extension in white_list_formats:
+                for extension in read_formats:
                     if fname.lower().endswith('.' + extension):
                         is_valid = True
                         break
