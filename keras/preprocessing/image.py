@@ -13,6 +13,7 @@ from six.moves import range
 import os
 import sys
 import threading
+import warnings
 
 from .. import backend as K
 
@@ -313,15 +314,23 @@ class ImageDataGenerator(object):
             x /= (np.std(x, axis=standardize_axis, keepdims=True) + 1e-7)
 
         if self.featurewise_center:
-            x -= self.mean
+            if self.mean is None:
+                warnings.warn('no mean value available for featurewise_center, please run "fit" first.')
+            else:
+                x -= self.mean
         if self.featurewise_std_normalization:
-            x /= (self.std + 1e-7)
+            if self.std is None:
+                warnings.warn('no std value available for featurewise_std_normalization, please run "fit" first.')
+            else:
+                x /= (self.std + 1e-7)
 
         if self.zca_whitening:
-            flatx = np.reshape(x, (x.size))
-            whitex = np.dot(flatx, self.principal_components)
-            x = np.reshape(whitex, (x.shape[0], x.shape[1], x.shape[2]))
-
+            if self.principal_components is None:
+                warnings.warn('no principal_components value available for zca_whitening, please run "fit" first.')
+            else:
+                flatx = np.reshape(x, (x.size))
+                whitex = np.dot(flatx, self.principal_components)
+                x = np.reshape(whitex, (x.shape[0], x.shape[1], x.shape[2]))
         return x
 
     def random_transform(self, x):
@@ -397,6 +406,18 @@ class ImageDataGenerator(object):
         for p in pipeline:
             x = p(x)
         return x
+
+    def fit_generator(self, generator, nb_sample, **kwargs):
+        x = next(generator)
+        if type(x) is tuple:
+            x = x[0]
+        while x.shape[0]<nb_sample:
+            x_ = next(generator)
+            if type(x_) is tuple:
+                x_ = x_[0]
+            np.concatenate(x, x_, axis=0)
+        x = x[:nb_sample]
+        self.fit(x, **kwargs)
 
     def fit(self, X,
             augment=False,
