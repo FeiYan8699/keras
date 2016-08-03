@@ -415,7 +415,7 @@ class ImageDataGenerator(object):
             x_ = next(generator)
             if type(x_) is tuple:
                 x_ = x_[0]
-            np.concatenate(x, x_, axis=0)
+            np.concatenate((x, x_), axis=0)
         x = x[:nb_sample]
         self.fit(x, **kwargs)
 
