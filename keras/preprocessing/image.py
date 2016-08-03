@@ -390,7 +390,9 @@ class ImageDataGenerator(object):
         # barrel/fisheye
         return x
 
-    def process(self, x, pipeline=self.pipline):
+    def process(self, x, pipeline=None):
+        if pipeline is None:
+            pipeline = self.pipeline
         for p in pipeline:
             x = p(x)
         return x
