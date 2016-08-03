@@ -263,7 +263,7 @@ class ImageDataGenerator(object):
         assert not 0 in samplewise_standardize_axis, 'sample-wise standardize axis should not include 0'
         self.samplewise_standardize_axis = samplewise_standardize_axis
 
-        self.random_transform_seed = random_transform_seed
+        self.random_transform_seed = random_transform_seed or np.random.randint(0,4294967295)
         if np.isscalar(zoom_range):
             self.zoom_range = [1 - zoom_range, 1 + zoom_range]
         elif len(zoom_range) == 2:
@@ -330,9 +330,9 @@ class ImageDataGenerator(object):
         img_row_index = self.row_index - 1
         img_col_index = self.col_index - 1
         img_channel_index = self.channel_index - 1
-        if self.random_transform_seed is not None:
-            np.random.seed(self.random_transform_seed)
-            self.random_transform_seed = np.random.randint(0,4294967295)
+        np.random.seed(self.random_transform_seed)
+        # generate a seed for next transform
+        self.random_transform_seed = np.random.randint(0,4294967295)
         # use composition of homographies to generate final transform that needs to be applied
         if self.rotation_range:
             theta = np.pi / 180 * np.random.uniform(-self.rotation_range, self.rotation_range)
