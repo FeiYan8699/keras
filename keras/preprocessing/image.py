@@ -11,6 +11,7 @@ from scipy import linalg
 import scipy.ndimage as ndi
 from six.moves import range
 import os
+import sys
 import threading
 
 from .. import backend as K
@@ -413,9 +414,9 @@ class ImageDataGenerator(object):
         '''
         X = np.copy(X)
         if augment:
-            pipeline_index = self.pipeline.index(self.standardize)
-            if pipeline_index>0:
-                pipeline = self.pipeline[:pipeline_index]
+            std_index = self.pipeline.index(self.standardize)
+            if std_index>0:
+                pipeline = self.pipeline[:std_index]
                 image_shape = self.process(X[0], pipeline).shape
                 aX = np.zeros((rounds * X.shape[0],) + image_shape)
                 for r in range(rounds):
@@ -423,6 +424,7 @@ class ImageDataGenerator(object):
                         aX[i + r * X.shape[0]] = self.process(X[i], pipeline)
                 X = aX
 
+        X = X.astype('float32')
         if self.featurewise_center:
             self.mean = np.mean(X, axis=self.featurewise_standardize_axis, keepdims=True)
             self.mean = np.squeeze(self.mean, axis=0)
@@ -476,6 +478,15 @@ class Iterator(object):
             yield (index_array[current_index: current_index + current_batch_size],
                    current_index, current_batch_size)
 
+    def sync_and_zip(self, it):
+        it.index_generator = self.index_generator
+        if (sys.version_info > (3, 0)):
+            iter_zip = zip
+        else:
+            from itertools import izip
+            iter_zip = izip
+        return iter_zip(self, it)
+
     def __iter__(self):
         # needed if we want to do something like:
         # for x, y in data_gen.flow(...):
@@ -507,6 +518,13 @@ class NumpyArrayIterator(Iterator):
         self.image_shape = self.image_data_generator.process(X[0]).shape
         seed = seed or image_data_generator.random_transform_seed
         super(NumpyArrayIterator, self).__init__(X.shape[0], batch_size, shuffle, seed)
+
+    def sync_and_zip(self, it):
+        assert isinstance(it, self.__class__), 'only isinstances from the same class can be zipped.'
+        assert self.X.shape[0] == it.X.shape[0]
+        assert self.dim_ordering == it.dim_ordering
+        it.image_data_generator.random_transform_seed = self.image_data_generator.random_transform_seed
+        super(NumpyArrayIterator, self).sync_and_zip(it)
 
     def next(self):
         # for python 2.x.
@@ -616,6 +634,15 @@ class DirectoryIterator(Iterator):
 
         seed = seed or image_data_generator.random_transform_seed
         super(DirectoryIterator, self).__init__(self.nb_sample, batch_size, shuffle, seed)
+
+    def sync_and_zip(self, it):
+        assert isinstance(it, self.__class__), 'only isinstance from the same class can be zipped.'
+        assert self.nb_sample == it.nb_sample
+        assert self.dim_ordering == it.dim_ordering
+        assert len(self.filenames) == len(it.filenames)
+        assert np.alltrue(self.classes == it.classes)
+        it.image_data_generator.random_transform_seed = self.image_data_generator.random_transform_seed
+        super(NumpyArrayIterator, self).sync_and_zip(it)
 
     def pil_image_reader(self, filepath):
         img = load_img(filepath, target_mode=self.target_mode, target_size=self.target_size)
