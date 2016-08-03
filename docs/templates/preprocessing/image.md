@@ -21,7 +21,6 @@ keras.preprocessing.image.ImageDataGenerator(featurewise_center=False,
     vertical_flip=False,
     random_transform_seed=None,
     rescale=None,
-    preprocessing=None,
     dim_ordering=K.image_dim_ordering())
 ```
 
@@ -50,8 +49,6 @@ Generate batches of tensor image data with real-time data augmentation. The data
     - __rescale__: rescaling factor. Defaults to None. If None or 0, no rescaling is applied,
             otherwise we multiply the data by the value provided (before applying
             any other transformation).
-    - __preprocessing__: Function. Defaults to None. A function performs preprocessing on the image array before `random_transform` and `standardize`.
-            If set, a numpy array will be passed to the function, and the result array should be returned.
     - __dim_ordering__: One of {"th", "tf"}.
         "tf" mode means that the images should have shape `(samples, width, height, channels)`,
         "th" mode means that the images should have shape `(samples, channels, width, height)`.

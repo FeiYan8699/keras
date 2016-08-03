@@ -1,6 +1,6 @@
 '''Fairly basic set of tools for real-time data augmentation on image data.
 Can easily be extended to include new transformations,
-new preprocessing methods, etc...
+new process methods, etc...
 '''
 from __future__ import absolute_import
 from __future__ import print_function
@@ -120,6 +120,7 @@ def flip_axis(x, axis):
 
 def array_to_img(x, dim_ordering=K.image_dim_ordering(), mode=None, scale=True):
     from PIL import Image
+    x = x.copy()
     if dim_ordering == 'th':
         x = x.transpose(1, 2, 0)
     if scale:
@@ -228,14 +229,12 @@ class ImageDataGenerator(object):
                  vertical_flip=False,
                  random_transform_seed=None,
                  rescale=None,
-                 preprocessing=None,
                  dim_ordering=K.image_dim_ordering()):
         self.__dict__.update(locals())
         self.mean = None
         self.std = None
         self.principal_components = None
         self.rescale = rescale
-        self.preprocessing = preprocessing
 
         if dim_ordering not in {'tf', 'th'}:
             raise Exception('dim_ordering should be "tf" (channel after row and '
@@ -272,6 +271,10 @@ class ImageDataGenerator(object):
             raise Exception('zoom_range should be a float or '
                             'a tuple or list of two floats. '
                             'Received arg: ', zoom_range)
+
+        self.pipeline = []
+        self.pipeline.append(self.random_transform)
+        self.pipeline.append(self.standardize)
 
     def flow(self, X, y=None, batch_size=32, shuffle=True, seed=None,
              save_to_dir=None, save_prefix='', save_mode=None, save_format='jpeg'):
@@ -321,6 +324,7 @@ class ImageDataGenerator(object):
         return x
 
     def random_transform(self, x):
+        x = x.astype('float32')
         # x is a single image, so it doesn't have image number at index 0
         img_row_index = self.row_index - 1
         img_col_index = self.col_index - 1
@@ -383,8 +387,12 @@ class ImageDataGenerator(object):
                 x = flip_axis(x, img_row_index)
 
         # TODO:
-        # channel-wise normalization
         # barrel/fisheye
+        return x
+
+    def process(self, x, pipeline=self.pipline):
+        for p in pipeline:
+            x = p(x)
         return x
 
     def fit(self, X,
@@ -401,19 +409,17 @@ class ImageDataGenerator(object):
                 how many augmentation passes to do over the data
             seed: random seed.
         '''
-        X = np.copy(X).astype('float32')
+        X = np.copy(X)
         if augment:
-            if self.preprocessing:
-                image_shape = self.preprocessing(X[0]).shape
-            else:
-                image_shape = X[0].shape
-            aX = np.zeros((rounds * X.shape[0],) + image_shape)
-            for r in range(rounds):
-                for i in range(X.shape[0]):
-                    if self.preprocessing:
-                        X[i] = self.preprocessing(X[i])
-                    aX[i + r * X.shape[0]] = self.random_transform(X[i])
-            X = aX
+            pipeline_index = self.pipeline.index(self.standardize)
+            if pipeline_index>0:
+                pipeline = self.pipeline[:pipeline_index]
+                image_shape = self.process(X[0], pipeline).shape
+                aX = np.zeros((rounds * X.shape[0],) + image_shape)
+                for r in range(rounds):
+                    for i in range(X.shape[0]):
+                        aX[i + r * X.shape[0]] = self.process(X[i], pipeline)
+                X = aX
 
         if self.featurewise_center:
             self.mean = np.mean(X, axis=self.featurewise_standardize_axis, keepdims=True)
@@ -482,7 +488,8 @@ class NumpyArrayIterator(Iterator):
     def __init__(self, X, y, image_data_generator,
                  batch_size=32, shuffle=False, seed=None,
                  dim_ordering=K.image_dim_ordering(),
-                 save_to_dir=None, save_prefix='', save_mode=None, save_format='jpeg'):
+                 save_to_dir=None, save_prefix='',
+                 save_mode=None, save_format='jpeg'):
         if y is not None and len(X) != len(y):
             raise Exception('X (images tensor) and y (labels) '
                             'should have the same length. '
@@ -495,10 +502,7 @@ class NumpyArrayIterator(Iterator):
         self.save_prefix = save_prefix
         self.save_mode = save_mode
         self.save_format = save_format
-        if self.image_data_generator.preprocessing:
-            self.image_shape = self.image_data_generator.preprocessing(X[0]).shape
-        else:
-            self.image_shape = X[0].shape
+        self.image_shape = self.image_data_generator.process(X[0]).shape
         seed = seed or image_data_generator.random_transform_seed
         super(NumpyArrayIterator, self).__init__(X.shape[0], batch_size, shuffle, seed)
 
@@ -513,10 +517,7 @@ class NumpyArrayIterator(Iterator):
         batch_x = np.zeros((current_batch_size,) + self.image_shape)
         for i, j in enumerate(index_array):
             x = self.X[j]
-            if self.image_data_generator.preprocessing:
-                x = self.image_data_generator.preprocessing(x)
-            x = self.image_data_generator.random_transform(x.astype('float32'))
-            x = self.image_data_generator.standardize(x)
+            x = self.image_data_generator.process(x)
             batch_x[i] = x
         if self.save_to_dir:
             for i in range(current_batch_size):
@@ -540,7 +541,8 @@ class DirectoryIterator(Iterator):
                  dim_ordering=K.image_dim_ordering,
                  classes=None, class_mode='categorical',
                  batch_size=32, shuffle=True, seed=None,
-                 save_to_dir=None, save_prefix='', save_mode=None, save_format='jpeg'):
+                 save_to_dir=None, save_prefix='',
+                 save_mode=None, save_format='jpeg'):
         self.directory = directory
         self.image_data_generator = image_data_generator
         self.image_reader = image_reader
@@ -607,8 +609,7 @@ class DirectoryIterator(Iterator):
         # read one image to get the actual image shape
         fname = self.filenames[0]
         x = self.image_reader(os.path.join(self.directory, fname))
-        if self.image_data_generator.preprocessing:
-            x = self.image_data_generator.preprocessing(x)
+        x = self.image_data_generator.process(x)
         self.image_shape = x.shape
 
         seed = seed or image_data_generator.random_transform_seed
@@ -627,10 +628,7 @@ class DirectoryIterator(Iterator):
         for i, j in enumerate(index_array):
             fname = self.filenames[j]
             x = self.image_reader(os.path.join(self.directory, fname))
-            if self.image_data_generator.preprocessing:
-                x = self.image_data_generator.preprocessing(x)
-            x = self.image_data_generator.random_transform(x.astype('float32'))
-            x = self.image_data_generator.standardize(x)
+            x = self.image_data_generator.process(x)
             batch_x[i] = x
         # optionally save augmented images to disk for debugging purposes
         if self.save_to_dir:
