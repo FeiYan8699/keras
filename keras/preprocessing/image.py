@@ -461,11 +461,11 @@ class Iterator(object):
         self.reset()
         while 1:
             if self.batch_index == 0:
-                index_array = np.arange(N)
+                self.index_array = np.arange(N)
                 if shuffle:
                     if seed is not None:
                         np.random.seed(seed + self.total_batches_seen)
-                    index_array = np.random.permutation(N)
+                    self.index_array = np.random.permutation(N)
 
             current_index = (self.batch_index * batch_size) % N
             if N >= current_index + batch_size:
@@ -475,11 +475,16 @@ class Iterator(object):
                 current_batch_size = N - current_index
                 self.batch_index = 0
             self.total_batches_seen += 1
-            yield (index_array[current_index: current_index + current_batch_size],
+            yield (self.index_array[current_index: current_index + current_batch_size],
                    current_index, current_batch_size)
 
-    def sync(self, it):
-        it.index_generator = self.index_generator
+    def sync(self, it, seed=None):
+        assert self.N == it.N
+        assert self.batch_size == it.batch_size
+        assert self.shuffle == it.shuffle
+        seed = seed or np.random.randint(0,4294967295)
+        self.index_generator = self._flow_index(self.N, self.batch_size, self.shuffle, seed)
+        it.index_generator = it._flow_index(it.N, it.batch_size, it.shuffle, seed)
         if (sys.version_info > (3, 0)):
             iter_zip = zip
         else:
