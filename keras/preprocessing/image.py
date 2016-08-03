@@ -196,8 +196,8 @@ class ImageDataGenerator(object):
             'constant'. Default is 0.
         horizontal_flip: whether to randomly flip images horizontally.
         vertical_flip: whether to randomly flip images vertically.
-        random_transform_seed: random seed for reproducible random spatial		
-            transformation. If not None, it will also be used by `flow` or		
+        random_transform_seed: random seed for reproducible random spatial
+            transformation. If not None, it will also be used by `flow` or
             `flow_from_directory` in case of no seed is set.
         rescale: rescaling factor. If None or 0, no rescaling is applied,
             otherwise we multiply the data by the value provided (before applying
@@ -254,15 +254,15 @@ class ImageDataGenerator(object):
         featurewise_standardize_axis = featurewise_standardize_axis or 0
         if type(featurewise_standardize_axis) is int:
             featurewise_standardize_axis = (featurewise_standardize_axis, )
-        assert 0 in featurewise_standardize_axis, 'feature-wise standardize axis should include 0'		
+        assert 0 in featurewise_standardize_axis, 'feature-wise standardize axis should include 0'
         self.featurewise_standardize_axis = featurewise_standardize_axis
-        
+
         samplewise_standardize_axis = samplewise_standardize_axis or self.channel_index
         if type(samplewise_standardize_axis) is int:
             samplewise_standardize_axis = (samplewise_standardize_axis, )
         assert not 0 in samplewise_standardize_axis, 'sample-wise standardize axis should not include 0'
         self.samplewise_standardize_axis = samplewise_standardize_axis
-        
+
         self.random_transform_seed = random_transform_seed
         if np.isscalar(zoom_range):
             self.zoom_range = [1 - zoom_range, 1 + zoom_range]
@@ -547,7 +547,6 @@ class DirectoryIterator(Iterator):
         self.target_size = target_size
         self.target_mode = target_mode
         self.dim_ordering = dim_ordering
-        self.classes = classes
         if class_mode not in {'categorical', 'binary', 'sparse', None}:
             raise ValueError('Invalid class_mode:', class_mode,
                              '; expected one of "categorical", '
@@ -566,6 +565,9 @@ class DirectoryIterator(Iterator):
             for subdir in sorted(os.listdir(directory)):
                 if os.path.isdir(os.path.join(directory, subdir)):
                     classes.append(subdir)
+        # if no class is found, add '' for scanning the root folder
+        if class_mode is None and len(classes) == 0:
+            classes.append('')
         self.nb_class = len(classes)
         self.class_indices = dict(zip(classes, range(len(classes))))
 
