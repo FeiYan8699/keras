@@ -500,7 +500,8 @@ class Iterator(object):
                     if seed is not None:
                         np.random.seed(seed + self.total_batches_seen)
                     self.index_array = np.random.permutation(N)
-                    np.random.seed()
+                    if seed is not None:
+                        np.random.seed()
 
             current_index = (self.batch_index * batch_size) % N
             if N >= current_index + batch_size:
