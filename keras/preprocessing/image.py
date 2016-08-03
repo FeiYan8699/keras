@@ -478,7 +478,7 @@ class Iterator(object):
             yield (index_array[current_index: current_index + current_batch_size],
                    current_index, current_batch_size)
 
-    def sync_and_zip(self, it):
+    def sync(self, it):
         it.index_generator = self.index_generator
         if (sys.version_info > (3, 0)):
             iter_zip = zip
@@ -519,12 +519,12 @@ class NumpyArrayIterator(Iterator):
         seed = seed or image_data_generator.random_transform_seed
         super(NumpyArrayIterator, self).__init__(X.shape[0], batch_size, shuffle, seed)
 
-    def sync_and_zip(self, it):
+    def sync(self, it):
         assert isinstance(it, self.__class__), 'only isinstances from the same class can be zipped.'
         assert self.X.shape[0] == it.X.shape[0]
         assert self.dim_ordering == it.dim_ordering
         it.image_data_generator.random_transform_seed = self.image_data_generator.random_transform_seed
-        super(NumpyArrayIterator, self).sync_and_zip(it)
+        super(NumpyArrayIterator, self).sync(it)
 
     def next(self):
         # for python 2.x.
@@ -635,14 +635,14 @@ class DirectoryIterator(Iterator):
         seed = seed or image_data_generator.random_transform_seed
         super(DirectoryIterator, self).__init__(self.nb_sample, batch_size, shuffle, seed)
 
-    def sync_and_zip(self, it):
+    def sync(self, it):
         assert isinstance(it, self.__class__), 'only isinstance from the same class can be zipped.'
         assert self.nb_sample == it.nb_sample
         assert self.dim_ordering == it.dim_ordering
         assert len(self.filenames) == len(it.filenames)
         assert np.alltrue(self.classes == it.classes)
         it.image_data_generator.random_transform_seed = self.image_data_generator.random_transform_seed
-        super(NumpyArrayIterator, self).sync_and_zip(it)
+        super(DirectoryIterator, self).sync(it)
 
     def pil_image_reader(self, filepath):
         img = load_img(filepath, target_mode=self.target_mode, target_size=self.target_size)
