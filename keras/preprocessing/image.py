@@ -544,6 +544,8 @@ class DirectoryIterator(Iterator):
         self.directory = directory
         self.image_data_generator = image_data_generator
         self.image_reader = image_reader
+        if self.image_reader == 'pil':
+            self.image_reader = self.pil_image_reader
         self.target_size = target_size
         self.target_mode = target_mode
         self.dim_ordering = dim_ordering
@@ -601,11 +603,9 @@ class DirectoryIterator(Iterator):
                     self.filenames.append(os.path.join(subdir, fname))
                     i += 1
 
-        # read one image to get the real image shape
+        assert len(self.filenames)>0, 'No valid file is found in the target directory.'
+        # read one image to get the actual image shape
         fname = self.filenames[0]
-        if self.image_reader == 'pil':
-            self.image_reader = self.pil_image_reader
-
         x = self.image_reader(os.path.join(self.directory, fname))
         if self.image_data_generator.preprocessing:
             x = self.image_data_generator.preprocessing(x)
