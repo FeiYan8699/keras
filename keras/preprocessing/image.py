@@ -264,7 +264,7 @@ class ImageDataGenerator(object):
         assert not 0 in samplewise_standardize_axis, 'sample-wise standardize axis should not include 0'
         self.samplewise_standardize_axis = samplewise_standardize_axis
 
-        self.random_transform_seed = random_transform_seed or np.random.randint(0,4294967295)
+        self.random_transform_seed = random_transform_seed or np.random.randint(0, 4294967295)
         if np.isscalar(zoom_range):
             self.zoom_range = [1 - zoom_range, 1 + zoom_range]
         elif len(zoom_range) == 2:
@@ -341,7 +341,7 @@ class ImageDataGenerator(object):
         img_channel_index = self.channel_index - 1
         np.random.seed(self.random_transform_seed)
         # generate a seed for next transform
-        self.random_transform_seed = np.random.randint(0,4294967295)
+        self.random_transform_seed = np.random.randint(0, 4294967295)
         # use composition of homographies to generate final transform that needs to be applied
         if self.rotation_range:
             theta = np.pi / 180 * np.random.uniform(-self.rotation_range, self.rotation_range)
@@ -398,6 +398,9 @@ class ImageDataGenerator(object):
 
         # TODO:
         # barrel/fisheye
+
+        # randomize the seed
+        np.random.seed()
         return x
 
     def process(self, x, pipeline=None):
@@ -497,6 +500,7 @@ class Iterator(object):
                     if seed is not None:
                         np.random.seed(seed + self.total_batches_seen)
                     self.index_array = np.random.permutation(N)
+                    np.random.seed()
 
             current_index = (self.batch_index * batch_size) % N
             if N >= current_index + batch_size:
@@ -513,7 +517,7 @@ class Iterator(object):
         assert self.N == it.N
         assert self.batch_size == it.batch_size
         assert self.shuffle == it.shuffle
-        seed = seed or np.random.randint(0,4294967295)
+        seed = seed or np.random.randint(0, 4294967295)
         it.total_batches_seen = self.total_batches_seen
         self.index_generator = self._flow_index(self.N, self.batch_size, self.shuffle, seed)
         it.index_generator = it._flow_index(it.N, it.batch_size, it.shuffle, seed)
