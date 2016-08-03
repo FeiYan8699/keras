@@ -524,7 +524,7 @@ class NumpyArrayIterator(Iterator):
         assert self.X.shape[0] == it.X.shape[0]
         assert self.dim_ordering == it.dim_ordering
         it.image_data_generator.random_transform_seed = self.image_data_generator.random_transform_seed
-        super(NumpyArrayIterator, self).sync(it)
+        return super(NumpyArrayIterator, self).sync(it)
 
     def next(self):
         # for python 2.x.
@@ -642,7 +642,7 @@ class DirectoryIterator(Iterator):
         assert len(self.filenames) == len(it.filenames)
         assert np.alltrue(self.classes == it.classes)
         it.image_data_generator.random_transform_seed = self.image_data_generator.random_transform_seed
-        super(DirectoryIterator, self).sync(it)
+        return super(DirectoryIterator, self).sync(it)
 
     def pil_image_reader(self, filepath):
         img = load_img(filepath, target_mode=self.target_mode, target_size=self.target_size)
