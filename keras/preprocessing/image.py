@@ -408,6 +408,16 @@ class ImageDataGenerator(object):
         return x
 
     def fit_generator(self, generator, nb_sample, **kwargs):
+        '''Generate array from generator and pass it to `fit`.
+
+        # Arguments
+            generator: Iterator, generate data for fitting.
+            nb_sample: Int, number of samples to be generated from the generator.
+            augment: whether to fit on randomly augmented samples
+            rounds: if `augment`,
+                how many augmentation passes to do over the data
+            seed: random seed.
+        '''
         x = next(generator)
         if type(x) is tuple:
             x = x[0]
@@ -415,7 +425,7 @@ class ImageDataGenerator(object):
             x_ = next(generator)
             if type(x_) is tuple:
                 x_ = x_[0]
-            np.concatenate((x, x_), axis=0)
+            x = np.concatenate((x, x_), axis=0)
         x = x[:nb_sample]
         self.fit(x, **kwargs)
 
