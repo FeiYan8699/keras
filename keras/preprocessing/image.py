@@ -514,6 +514,7 @@ class Iterator(object):
         assert self.batch_size == it.batch_size
         assert self.shuffle == it.shuffle
         seed = seed or np.random.randint(0,4294967295)
+        it.total_batches_seen = self.total_batches_seen
         self.index_generator = self._flow_index(self.N, self.batch_size, self.shuffle, seed)
         it.index_generator = it._flow_index(it.N, it.batch_size, it.shuffle, seed)
         if (sys.version_info > (3, 0)):
