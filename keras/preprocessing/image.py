@@ -527,7 +527,6 @@ class NumpyArrayIterator(Iterator):
     def sync(self, it):
         assert isinstance(it, self.__class__), 'only isinstances from the same class can be zipped.'
         assert self.X.shape[0] == it.X.shape[0]
-        assert self.dim_ordering == it.dim_ordering
         it.image_data_generator.random_transform_seed = self.image_data_generator.random_transform_seed
         return super(NumpyArrayIterator, self).sync(it)
 
@@ -643,7 +642,6 @@ class DirectoryIterator(Iterator):
     def sync(self, it):
         assert isinstance(it, self.__class__), 'only isinstance from the same class can be zipped.'
         assert self.nb_sample == it.nb_sample
-        assert self.dim_ordering == it.dim_ordering
         assert len(self.filenames) == len(it.filenames)
         assert np.alltrue(self.classes == it.classes)
         it.image_data_generator.random_transform_seed = self.image_data_generator.random_transform_seed
