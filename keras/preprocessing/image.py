@@ -181,11 +181,62 @@ def standardize(x,
                 mean=None, std=None,
                 samplewise_std_normalization=False,
                 zca_whitening=False, principal_components=None,
+                featurewise_standardize_axis=None,
                 samplewise_standardize_axis=None,
                 fitting=False,
+                verbose=0,
+                config={},
                 **kwargs):
+    '''
+
+    # Arguments
+        featurewise_center: set input mean to 0 over the dataset.
+        samplewise_center: set each sample mean to 0.
+        featurewise_std_normalization: divide inputs by std of the dataset.
+        samplewise_std_normalization: divide each input by its std.
+        featurewise_standardize_axis: axis along which to perform feature-wise center and std normalization.
+        samplewise_standardize_axis: axis along which to to perform sample-wise center and std normalization.
+        zca_whitening: apply ZCA whitening.
+    
+    '''
     # skip fitting
-    if fitting:
+    if fitting == 'enter':
+        if config.has_key('_X'):
+            config['_X'] = np.concatenate((config['_X'],  np.expand_dims(x, axis=0)),axis=0)
+            if verbose:
+                print('=', end='')
+        else:
+            config['_X'] = np.expand_dims(x, axis=0)
+            if verbose:
+                print('>>', end='')
+        return x
+    elif fitting == 'exit':
+        if config.has_key('_X'):
+            X = config['_X'].astype('float32')
+            del config['_X']
+            if featurewise_center or featurewise_std_normalization:
+                featurewise_standardize_axis = featurewise_standardize_axis or 0
+                if type(featurewise_standardize_axis) is int:
+                    featurewise_standardize_axis = (featurewise_standardize_axis, )
+                assert 0 in featurewise_standardize_axis, 'feature-wise standardize axis should include 0'
+
+            if featurewise_center:
+                mean = np.mean(X, axis=featurewise_standardize_axis, keepdims=True)
+                config['mean'] = np.squeeze(mean, axis=0)
+                X -= mean
+
+            if featurewise_std_normalization:
+                std = np.std(X, axis=featurewise_standardize_axis, keepdims=True)
+                config['std'] = np.squeeze(std, axis=0)
+                X /= (std + 1e-7)
+
+            if zca_whitening:
+                flatX = np.reshape(X, (X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]))
+                sigma = np.dot(flatX.T, flatX) / flatX.shape[1]
+                U, S, V = linalg.svd(sigma)
+                config['principal_components'] = np.dot(np.dot(U, np.diag(1. / np.sqrt(S + 10e-7))), U.T)
+            if verbose:
+                print('#')
         return x
 
     if rescale:
@@ -206,8 +257,9 @@ def standardize(x,
     if samplewise_std_normalization:
         x /= (np.std(x, axis=samplewise_standardize_axis, keepdims=True) + 1e-7)
 
-    if (featurewise_center and mean is None) or (featurewise_std_normalization and std is None) or (zca_whitening and principal_components is None):
-        print('WARNING: feature-wise standardization and zca whitening will be disabled, please run "fit" first.')
+    if verbose:
+        if (featurewise_center and mean is None) or (featurewise_std_normalization and std is None) or (zca_whitening and principal_components is None):
+            print('WARNING: feature-wise standardization and zca whitening will be disabled, please run "fit" first.')
 
     if featurewise_center:
         if mean is not None:
@@ -238,6 +290,28 @@ def random_transform(x,
                      rescale=None,
                      sync_seed=None,
                      **kwargs):
+    '''
+
+    # Arguments
+        rotation_range: degrees (0 to 180).
+        width_shift_range: fraction of total width.
+        height_shift_range: fraction of total height.
+        shear_range: shear intensity (shear angle in radians).
+        zoom_range: amount of zoom. if scalar z, zoom will be randomly picked
+            in the range [1-z, 1+z]. A sequence of two can be passed instead
+            to select this range.
+        channel_shift_range: shift range for each channels.
+        fill_mode: points outside the boundaries are filled according to the
+            given mode ('constant', 'nearest', 'reflect' or 'wrap'). Default
+            is 'nearest'.
+        cval: value used for points outside the boundaries when fill_mode is
+            'constant'. Default is 0.
+        horizontal_flip: whether to randomly flip images horizontally.
+        vertical_flip: whether to randomly flip images vertically.
+        rescale: rescaling factor. If None or 0, no rescaling is applied,
+            otherwise we multiply the data by the value provided (before applying
+            any other transformation).
+    '''
     np.random.seed(sync_seed)
 
     x = x.astype('float32')
@@ -346,8 +420,6 @@ class ImageDataGenerator(object):
             'constant'. Default is 0.
         horizontal_flip: whether to randomly flip images horizontally.
         vertical_flip: whether to randomly flip images vertically.
-        seed: random seed for reproducible pipeline processing. If not None, it will also be used by `flow` or
-            `flow_from_directory` to generate the shuffle index in case of no seed is set.
         rescale: rescaling factor. If None or 0, no rescaling is applied,
             otherwise we multiply the data by the value provided (before applying
             any other transformation).
@@ -356,6 +428,8 @@ class ImageDataGenerator(object):
             It defaults to the `image_dim_ordering` value found in your
             Keras config file at `~/.keras/keras.json`.
             If you never set it, then it will be "th".
+        seed: random seed for reproducible pipeline processing. If not None, it will also be used by `flow` or
+            `flow_from_directory` to generate the shuffle index in case of no seed is set.
     '''
     def __init__(self,
                  featurewise_center=False,
@@ -375,10 +449,12 @@ class ImageDataGenerator(object):
                  cval=0.,
                  horizontal_flip=False,
                  vertical_flip=False,
-                 seed=None,
                  rescale=None,
-                 dim_ordering=K.image_dim_ordering()):
+                 dim_ordering=K.image_dim_ordering(),
+                 seed=None,
+                 verbose=1):
         self.config = copy.deepcopy(locals())
+        self.config['config'] = self.config
         self.config['mean'] = None
         self.config['std'] = None
         self.config['principal_components'] = None
@@ -459,88 +535,44 @@ class ImageDataGenerator(object):
             x = p(x, **self.config)
         return x
 
-    def fit_generator(self, generator, nb_sample, **kwargs):
-        '''Generate array from generator and pass it to `fit`.
+    def fit_generator(self, generator, nb_iter):
+        '''Fit a generator
 
         # Arguments
             generator: Iterator, generate data for fitting.
-            nb_sample: Int, number of samples to be generated from the generator.
-            augment: whether to fit on randomly augmented samples
-            rounds: if `augment`,
-                how many augmentation passes to do over the data
-            seed: random seed.
+            nb_iter: Int, number of iteration to fit.
         '''
         with self.fit_lock:
+            self.__fitting = 'enter'
             try:
-                self.__fitting = True
-                x = next(generator)
-                if type(x) is tuple:
-                    x = x[0]
-                while x.shape[0]<nb_sample:
-                    x_ = next(generator)
-                    if type(x_) is tuple:
-                        x_ = x_[0]
-                    x = np.concatenate((x, x_), axis=0)
+                for i in xrange(nb_iter):
+                    next(generator)
+                self.__fitting = 'exit'
+                next(generator)
             finally:
                 self.__fitting = False
 
-        x = x[:nb_sample]
-        self.fit(x, augment=False, **kwargs)
-
     def fit(self, X,
-            augment=False,
-            rounds=1,
-            seed=None):
-        '''Required for featurewise_center, featurewise_std_normalization
-        and zca_whitening.
+            rounds=1):
+        '''Fit the pipeline on a numpy array
 
         # Arguments
             X: Numpy array, the data to fit on.
-            augment: whether to fit on randomly augmented samples
             rounds: if `augment`,
                 how many augmentation passes to do over the data
-            seed: random seed.
         '''
         X = np.copy(X)
         if augment:
-            aX = None
             with self.fit_lock:
-                self.__fitting = True
+                self.__fitting = 'enter'
                 try:
-                    for r in range(rounds):
-                        for i in range(X.shape[0]):
-                            x_ = self.process(X[i])
-                            if r == 0 and i == 0:
-                                aX = np.zeros((rounds * X.shape[0],) + x_.shape)
-                            aX[i + r * X.shape[0]] = x_
+                    for r in xrange(rounds):
+                        for i in xrange(X.shape[0]):
+                            self.process(X[i])
+                    self.__fitting = 'exit'
+                    self.process(X[i])
                 finally:
                     self.__fitting = False
-            X = aX
-
-        X = X.astype('float32')
-
-        if self.config['featurewise_center'] or self.config['featurewise_std_normalization']:
-            featurewise_standardize_axis = self.config['featurewise_standardize_axis'] or 0
-            if type(featurewise_standardize_axis) is int:
-                featurewise_standardize_axis = (featurewise_standardize_axis, )
-            assert 0 in featurewise_standardize_axis, 'feature-wise standardize axis should include 0'
-
-        if self.config['featurewise_center']:
-            self.config['mean'] = np.mean(X, axis=featurewise_standardize_axis, keepdims=True)
-            self.config['mean'] = np.squeeze(self.config['mean'], axis=0)
-            X -= self.config['mean']
-
-        if self.config['featurewise_std_normalization']:
-            self.config['std'] = np.std(X, axis=featurewise_standardize_axis, keepdims=True)
-            self.config['std'] = np.squeeze(self.config['std'], axis=0)
-            X /= (self.config['std'] + 1e-7)
-
-        if self.config['zca_whitening']:
-            flatX = np.reshape(X, (X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]))
-            sigma = np.dot(flatX.T, flatX) / flatX.shape[1]
-            U, S, V = linalg.svd(sigma)
-            self.config['principal_components'] = np.dot(np.dot(U, np.diag(1. / np.sqrt(S + 10e-7))), U.T)
-
 
 class Iterator(object):
 
@@ -628,8 +660,10 @@ class NumpyArrayIterator(Iterator):
         super(NumpyArrayIterator, self).__init__(X.shape[0], batch_size, shuffle, seed)
 
     def __add__(self, it):
-        assert isinstance(it, self.__class__), 'only isinstances from the same class can be zipped.'
-        assert self.X.shape[0] == it.X.shape[0]
+        if isinstance(it, NumpyArrayIterator):
+            assert self.X.shape[0] == it.X.shape[0]
+        if isinstance(it, DirectoryIterator):
+            assert self.X.shape[0] == it.nb_sample
         it.image_data_generator.sync(self.image_data_generator)
         return super(NumpyArrayIterator, self).__add__(it)
 
@@ -749,10 +783,12 @@ class DirectoryIterator(Iterator):
         super(DirectoryIterator, self).__init__(self.nb_sample, batch_size, shuffle, seed)
 
     def __add__(self, it):
-        assert isinstance(it, self.__class__), 'only isinstance from the same class can be zipped.'
-        assert self.nb_sample == it.nb_sample
-        assert len(self.filenames) == len(it.filenames)
-        assert np.alltrue(self.classes == it.classes)
+        if isinstance(it, DirectoryIterator):
+            assert self.nb_sample == it.nb_sample
+            assert len(self.filenames) == len(it.filenames)
+            assert np.alltrue(self.classes == it.classes)
+        if isinstance(it, NumpyArrayIterator):
+            assert self.nb_sample == self.X.shape[0]
         it.image_data_generator.sync(self.image_data_generator)
         return super(DirectoryIterator, self).__add__(it)
 
