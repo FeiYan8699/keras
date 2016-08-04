@@ -503,14 +503,16 @@ class ImageDataGenerator(object):
         '''
         X = np.copy(X)
         if augment:
-            image_shape = self.process(X[0]).shape
-            aX = np.zeros((rounds * X.shape[0],) + image_shape)
+            aX = None
             with self.fit_lock:
                 self.__fitting = True
                 try:
                     for r in range(rounds):
                         for i in range(X.shape[0]):
-                            aX[i + r * X.shape[0]] = self.process(X[i])
+                            x_ = self.process(X[i])
+                            if r == 0 and i == 0:
+                                aX = np.zeros((rounds * X.shape[0],) + x_.shape)
+                            aX[i + r * X.shape[0]] = x_
                 finally:
                     self.__fitting = False
             X = aX
@@ -546,6 +548,7 @@ class Iterator(object):
         self.N = N
         self.batch_size = batch_size
         self.shuffle = shuffle
+        self.seed = seed
         self.batch_index = 0
         self.total_batches_seen = 0
         self.lock = threading.Lock()
@@ -578,11 +581,11 @@ class Iterator(object):
             yield (self.index_array[current_index: current_index + current_batch_size],
                    current_index, current_batch_size)
 
-    def sync(self, it, seed=None):
+    def __add__(self, it):
         assert self.N == it.N
         assert self.batch_size == it.batch_size
         assert self.shuffle == it.shuffle
-        seed = seed or np.random.randint(0, 4294967295)
+        seed = self.seed or np.random.randint(0, 4294967295)
         it.total_batches_seen = self.total_batches_seen
         self.index_generator = self._flow_index(self.N, self.batch_size, self.shuffle, seed)
         it.index_generator = it._flow_index(it.N, it.batch_size, it.shuffle, seed)
@@ -621,15 +624,14 @@ class NumpyArrayIterator(Iterator):
         self.save_prefix = save_prefix
         self.save_mode = save_mode
         self.save_format = save_format
-        self.image_shape = self.image_data_generator.process(X[0]).shape
         seed = seed or image_data_generator.config['seed']
         super(NumpyArrayIterator, self).__init__(X.shape[0], batch_size, shuffle, seed)
 
-    def sync(self, it):
+    def __add__(self, it):
         assert isinstance(it, self.__class__), 'only isinstances from the same class can be zipped.'
         assert self.X.shape[0] == it.X.shape[0]
         it.image_data_generator.sync(self.image_data_generator)
-        return super(NumpyArrayIterator, self).sync(it)
+        return super(NumpyArrayIterator, self).__add__(it)
 
     def next(self):
         # for python 2.x.
@@ -639,10 +641,12 @@ class NumpyArrayIterator(Iterator):
         with self.lock:
             index_array, current_index, current_batch_size = next(self.index_generator)
         # The transformation of images is not under thread lock so it can be done in parallel
-        batch_x = np.zeros((current_batch_size,) + self.image_shape)
+        batch_x = None
         for i, j in enumerate(index_array):
             x = self.X[j]
             x = self.image_data_generator.process(x)
+            if i == 0:
+                batch_x = np.zeros((current_batch_size,) + x.shape)
             batch_x[i] = x
         if self.save_to_dir:
             for i in range(current_batch_size):
@@ -741,32 +745,29 @@ class DirectoryIterator(Iterator):
         self.reader_config['directory'] = self.directory
         self.reader_config['nb_sample'] = self.nb_sample
         self.reader_config['seed'] = seed
-        # read one image to get the actual image shape
-        fname = self.filenames[0]
-        x = self.image_reader(os.path.join(self.directory, fname), **self.reader_config)
-        x = self.image_data_generator.process(x)
-        self.image_shape = x.shape
 
         super(DirectoryIterator, self).__init__(self.nb_sample, batch_size, shuffle, seed)
 
-    def sync(self, it):
+    def __add__(self, it):
         assert isinstance(it, self.__class__), 'only isinstance from the same class can be zipped.'
         assert self.nb_sample == it.nb_sample
         assert len(self.filenames) == len(it.filenames)
         assert np.alltrue(self.classes == it.classes)
         it.image_data_generator.sync(self.image_data_generator)
-        return super(DirectoryIterator, self).sync(it)
+        return super(DirectoryIterator, self).__add__(it)
 
     def next(self):
         with self.lock:
             index_array, current_index, current_batch_size = next(self.index_generator)
         # The transformation of images is not under thread lock so it can be done in parallel
-        batch_x = np.zeros((current_batch_size,) + self.image_shape)
+        batch_x = None
         # build batch of image data
         for i, j in enumerate(index_array):
             fname = self.filenames[j]
             x = self.image_reader(os.path.join(self.directory, fname), **self.reader_config)
             x = self.image_data_generator.process(x)
+            if i == 0:
+                batch_x = np.zeros((current_batch_size,) + x.shape)
             batch_x[i] = x
         # optionally save augmented images to disk for debugging purposes
         if self.save_to_dir:
