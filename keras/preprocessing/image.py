@@ -15,6 +15,7 @@ import sys
 import threading
 import copy
 from .. import backend as K
+from ..utils.generic_utils import Progbar
 
 def random_rotation(x, rg, row_index=1, col_index=2, channel_index=0,
                     fill_mode='nearest', cval=0.):
@@ -199,44 +200,50 @@ def standardize(x,
         zca_whitening: apply ZCA whitening.
     
     '''
-    # skip fitting
-    if fitting == 'enter':
+    if fitting:
         if config.has_key('_X'):
-            config['_X'] = np.concatenate((config['_X'],  np.expand_dims(x, axis=0)),axis=0)
-            if verbose:
-                print('=', end='')
+            # add data to _X array
+            config['_X'][config['_iX']] = x
+            config['_iX'] +=1
+            if verbose and config.has_key('_fit_progressbar'):
+                config['_fit_progressbar'].update(config['_iX'], force=(config['_iX']==fitting))
+
+            # the array (_X) is ready to fit
+            if config['_iX'] >= fitting:
+                X = config['_X'].astype('float32')
+                del config['_X']
+                del config['_iX']
+                if featurewise_center or featurewise_std_normalization:
+                    featurewise_standardize_axis = featurewise_standardize_axis or 0
+                    if type(featurewise_standardize_axis) is int:
+                        featurewise_standardize_axis = (featurewise_standardize_axis, )
+                    assert 0 in featurewise_standardize_axis, 'feature-wise standardize axis should include 0'
+
+                if featurewise_center:
+                    mean = np.mean(X, axis=featurewise_standardize_axis, keepdims=True)
+                    config['mean'] = np.squeeze(mean, axis=0)
+                    X -= mean
+
+                if featurewise_std_normalization:
+                    std = np.std(X, axis=featurewise_standardize_axis, keepdims=True)
+                    config['std'] = np.squeeze(std, axis=0)
+                    X /= (std + 1e-7)
+
+                if zca_whitening:
+                    flatX = np.reshape(X, (X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]))
+                    sigma = np.dot(flatX.T, flatX) / flatX.shape[1]
+                    U, S, V = linalg.svd(sigma)
+                    config['principal_components'] = np.dot(np.dot(U, np.diag(1. / np.sqrt(S + 10e-7))), U.T)
+                if verbose:
+                    del config['_fit_progressbar']
         else:
-            config['_X'] = np.expand_dims(x, axis=0)
+            # start a new fitting, fitting = total sample number
+            config['_X'] = np.zeros((fitting,)+x.shape)
+            config['_iX'] = 0
+            config['_X'][config['_iX']] = x
+            config['_iX'] +=1
             if verbose:
-                print('>>', end='')
-        return x
-    elif fitting == 'exit':
-        if config.has_key('_X'):
-            X = config['_X'].astype('float32')
-            del config['_X']
-            if featurewise_center or featurewise_std_normalization:
-                featurewise_standardize_axis = featurewise_standardize_axis or 0
-                if type(featurewise_standardize_axis) is int:
-                    featurewise_standardize_axis = (featurewise_standardize_axis, )
-                assert 0 in featurewise_standardize_axis, 'feature-wise standardize axis should include 0'
-
-            if featurewise_center:
-                mean = np.mean(X, axis=featurewise_standardize_axis, keepdims=True)
-                config['mean'] = np.squeeze(mean, axis=0)
-                X -= mean
-
-            if featurewise_std_normalization:
-                std = np.std(X, axis=featurewise_standardize_axis, keepdims=True)
-                config['std'] = np.squeeze(std, axis=0)
-                X /= (std + 1e-7)
-
-            if zca_whitening:
-                flatX = np.reshape(X, (X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]))
-                sigma = np.dot(flatX.T, flatX) / flatX.shape[1]
-                U, S, V = linalg.svd(sigma)
-                config['principal_components'] = np.dot(np.dot(U, np.diag(1. / np.sqrt(S + 10e-7))), U.T)
-            if verbose:
-                print('#')
+                config['_fit_progressbar'] = Progbar(target=fitting, verbose=verbose)
         return x
 
     if rescale:
@@ -543,36 +550,29 @@ class ImageDataGenerator(object):
             nb_iter: Int, number of iteration to fit.
         '''
         with self.fit_lock:
-            self.__fitting = 'enter'
             try:
+                self.__fitting = nb_iter*generator.batch_size
                 for i in xrange(nb_iter):
                     next(generator)
-                self.__fitting = 'exit'
-                next(generator)
             finally:
                 self.__fitting = False
 
-    def fit(self, X,
-            rounds=1):
+    def fit(self, X, rounds=1):
         '''Fit the pipeline on a numpy array
 
         # Arguments
             X: Numpy array, the data to fit on.
-            rounds: if `augment`,
-                how many augmentation passes to do over the data
+            rounds: how many rounds of fit to do over the data
         '''
         X = np.copy(X)
-        if augment:
-            with self.fit_lock:
-                self.__fitting = 'enter'
-                try:
-                    for r in xrange(rounds):
-                        for i in xrange(X.shape[0]):
-                            self.process(X[i])
-                    self.__fitting = 'exit'
-                    self.process(X[i])
-                finally:
-                    self.__fitting = False
+        with self.fit_lock:
+            try:
+                self.__fitting = rounds*X.shape[0]
+                for r in xrange(rounds):
+                    for i in xrange(X.shape[0]):
+                        self.process(X[i])
+            finally:
+                self.__fitting = False
 
 class Iterator(object):
 
