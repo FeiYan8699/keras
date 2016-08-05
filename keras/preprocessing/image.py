@@ -14,6 +14,9 @@ import os
 import sys
 import threading
 import copy
+import inspect
+import types
+
 from .. import backend as K
 from ..utils.generic_utils import Progbar
 
@@ -198,7 +201,7 @@ def standardize(x,
         featurewise_standardize_axis: axis along which to perform feature-wise center and std normalization.
         samplewise_standardize_axis: axis along which to to perform sample-wise center and std normalization.
         zca_whitening: apply ZCA whitening.
-    
+
     '''
     if fitting:
         if config.has_key('_X'):
@@ -516,8 +519,8 @@ class ImageDataGenerator(object):
             save_mode=save_mode, save_format=save_format)
 
     def flow_from_directory(self, directory,
-                            color_mode='rgb', target_size=None,
-                            image_reader='pil', reader_config={},
+                            color_mode=None, target_size=None,
+                            image_reader='pil', reader_config={'target_mode':'RGB', 'target_size':(256,256)},
                             read_formats={'png','jpg','jpeg','bmp'},
                             classes=None, class_mode='categorical',
                             batch_size=32, shuffle=True, seed=None,
@@ -701,9 +704,9 @@ class NumpyArrayIterator(Iterator):
 class DirectoryIterator(Iterator):
 
     def __init__(self, directory, image_data_generator,
-                 color_mode='rgb', target_size=None,
+                 color_mode=None, target_size=None,
                  image_reader="pil", read_formats={'png','jpg','jpeg','bmp'},
-                 reader_config={'target_mode': None},
+                 reader_config={'target_mode': 'RGB', 'target_size':None},
                  dim_ordering=K.image_dim_ordering,
                  classes=None, class_mode='categorical',
                  batch_size=32, shuffle=True, seed=None,
@@ -715,8 +718,14 @@ class DirectoryIterator(Iterator):
         if self.image_reader == 'pil':
             self.image_reader = pil_image_reader
         self.reader_config = reader_config
-        self.reader_config['color_mode'] = color_mode
-        self.reader_config['target_size'] = target_size
+        # TODO: move color_mode and target_size to reader_config
+        if color_mode == 'rgb':
+            self.reader_config['target_mode'] = 'RGB'
+        elif color_mode == 'grayscale':
+            self.reader_config['target_mode'] = 'L'
+
+        if target_size:
+            self.reader_config['target_size'] = target_size
 
         self.dim_ordering = dim_ordering
         if class_mode not in {'categorical', 'binary', 'sparse', None}:
@@ -783,6 +792,13 @@ class DirectoryIterator(Iterator):
         self.reader_config['seed'] = seed
 
         super(DirectoryIterator, self).__init__(self.nb_sample, batch_size, shuffle, seed)
+        if inspect.isgeneratorfunction(self.image_reader):
+            self._reader_generator_mode = True
+            self._reader_generator = []
+            # set index batch_size to 1
+            self.index_generator = self._flow_index(self.N, 1 , self.shuffle, seed)
+        else:
+            self._reader_generator_mode = False
 
     def __add__(self, it):
         if isinstance(it, DirectoryIterator):
@@ -795,18 +811,45 @@ class DirectoryIterator(Iterator):
         return super(DirectoryIterator, self).__add__(it)
 
     def next(self):
-        with self.lock:
-            index_array, current_index, current_batch_size = next(self.index_generator)
-        # The transformation of images is not under thread lock so it can be done in parallel
-        batch_x = None
-        # build batch of image data
-        for i, j in enumerate(index_array):
-            fname = self.filenames[j]
-            x = self.image_reader(os.path.join(self.directory, fname), **self.reader_config)
-            x = self.image_data_generator.process(x)
-            if i == 0:
-                batch_x = np.zeros((current_batch_size,) + x.shape)
-            batch_x[i] = x
+        if self._reader_generator_mode:
+            sampleCount = 0
+            batch_x = None
+            _new_generator_flag = False
+            while sampleCount<self.batch_size:
+                for x in self._reader_generator:
+                    _new_generator_flag = False
+                    if x.ndim == 2:
+                        x = np.expand_dims(x, axis=0)
+                    x = self.image_data_generator.process(x)
+                    if sampleCount == 0:
+                        batch_x = np.zeros((self.batch_size,) + x.shape)
+                    batch_x[sampleCount] = x
+                    sampleCount +=1
+                    if sampleCount >= self.batch_size:
+                        break
+                if sampleCount >= self.batch_size or _new_generator_flag:
+                    break
+                with self.lock:
+                    index_array, _, _ = next(self.index_generator)
+                fname = self.filenames[index_array[0]]
+                self._reader_generator = self.image_reader(os.path.join(self.directory, fname), **self.reader_config)
+                assert isinstance(self._reader_generator, types.GeneratorType)
+                _new_generator_flag = True
+        else:
+            with self.lock:
+                index_array, current_index, current_batch_size = next(self.index_generator)
+            # The transformation of images is not under thread lock so it can be done in parallel
+            batch_x = None
+            # build batch of image data
+            for i, j in enumerate(index_array):
+                fname = self.filenames[j]
+                x = self.image_reader(os.path.join(self.directory, fname), **self.reader_config)
+                if x.ndim == 2:
+                    x = np.expand_dims(x, axis=0)
+                x = self.image_data_generator.process(x)
+                if i == 0:
+                    batch_x = np.zeros((current_batch_size,) + x.shape)
+                batch_x[i] = x
         # optionally save augmented images to disk for debugging purposes
         if self.save_to_dir:
             for i in range(current_batch_size):
