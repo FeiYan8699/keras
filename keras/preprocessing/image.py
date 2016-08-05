@@ -499,7 +499,9 @@ class ImageDataGenerator(object):
         return (self, image_data_generator)
 
     def set_pipeline(self, p):
-        if type(p) is list:
+        if p is None:
+            self.__pipeline = self.default_pipeline
+        elif type(p) is list:
             self.__pipeline = p
         else:
             raise Exception('invalid pipeline.')
