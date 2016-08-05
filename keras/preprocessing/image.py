@@ -285,6 +285,20 @@ def standardize(x,
             x = np.reshape(whitex, (x.shape[0], x.shape[1], x.shape[2]))
     return x
 
+def center_crop(x, center_crop_size, **kwargs):
+    centerw, centerh = x.shape[1]//2, x.shape[2]//2
+    halfw, halfh = center_crop_size[0]//2, center_crop_size[1]//2
+    return x[:, centerw-halfw:centerw+halfw,centerh-halfh:centerh+halfh]
+
+def random_crop(x, random_crop_size, sync_seed=None, **kwargs):
+    np.random.seed(sync_seed)
+    w, h = x.shape[1], x.shape[2]
+    rangew = (w - random_crop_size[0]) // 2
+    rangeh = (h - random_crop_size[1]) // 2
+    offsetw = 0 if rangew == 0 else np.random.randint(rangew)
+    offseth = 0 if rangeh == 0 else np.random.randint(rangeh)
+    return x[:, offsetw:offsetw+random_crop_size[0], offseth:offseth+random_crop_size[1]]
+
 def random_transform(x,
                      dim_ordering='th',
                      rotation_range=0.,
@@ -790,7 +804,7 @@ class DirectoryIterator(Iterator):
         self.reader_config['directory'] = self.directory
         self.reader_config['nb_sample'] = self.nb_sample
         self.reader_config['seed'] = seed
-
+        self.reader_config['sync_seed'] = self.image_data_generator.sync_seed
         super(DirectoryIterator, self).__init__(self.nb_sample, batch_size, shuffle, seed)
         if inspect.isgeneratorfunction(self.image_reader):
             self._reader_generator_mode = True
@@ -805,12 +819,17 @@ class DirectoryIterator(Iterator):
             assert self.nb_sample == it.nb_sample
             assert len(self.filenames) == len(it.filenames)
             assert np.alltrue(self.classes == it.classes)
+            assert self.image_reader == it.image_reader
+            if inspect.isgeneratorfunction(self.image_reader):
+                self._reader_generator = []
+                it._reader_generator = []
         if isinstance(it, NumpyArrayIterator):
             assert self.nb_sample == self.X.shape[0]
         it.image_data_generator.sync(self.image_data_generator)
         return super(DirectoryIterator, self).__add__(it)
 
     def next(self):
+        self.reader_config['sync_seed'] = self.image_data_generator.sync_seed
         if self._reader_generator_mode:
             sampleCount = 0
             batch_x = None
@@ -821,6 +840,7 @@ class DirectoryIterator(Iterator):
                     if x.ndim == 2:
                         x = np.expand_dims(x, axis=0)
                     x = self.image_data_generator.process(x)
+                    self.reader_config['sync_seed'] = self.image_data_generator.sync_seed
                     if sampleCount == 0:
                         batch_x = np.zeros((self.batch_size,) + x.shape)
                     batch_x[sampleCount] = x
