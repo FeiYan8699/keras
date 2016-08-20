@@ -742,6 +742,7 @@ class DirectoryIterator(Iterator):
             self.reader_config['target_size'] = target_size
 
         self.dim_ordering = dim_ordering
+        self.reader_config['dim_ordering'] = dim_ordering
         if class_mode not in {'categorical', 'binary', 'sparse', None}:
             raise ValueError('Invalid class_mode:', class_mode,
                              '; expected one of "categorical", '
