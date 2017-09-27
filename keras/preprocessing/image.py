@@ -719,8 +719,8 @@ class DirectoryIterator(Iterator):
 
     def __init__(self, directory, image_data_generator,
                  color_mode=None, target_size=None,
-                 image_reader="pil", read_formats={'png','jpg','jpeg','bmp'},
-                 reader_config={'target_mode': 'RGB', 'target_size':None},
+                 image_reader="pil", read_formats=None,
+                 reader_config=None,
                  dim_ordering=K.image_dim_ordering,
                  classes=None, class_mode='categorical',
                  batch_size=32, shuffle=True, seed=None,
@@ -731,6 +731,10 @@ class DirectoryIterator(Iterator):
         self.image_reader = image_reader
         if self.image_reader == 'pil':
             self.image_reader = pil_image_reader
+        if read_formats is None:
+            read_formats = {'png','jpg','jpeg','bmp'}
+        if reader_config is None:
+            reader_config = {'target_mode': 'RGB', 'target_size':None}
         self.reader_config = reader_config
         # TODO: move color_mode and target_size to reader_config
         if color_mode == 'rgb':
