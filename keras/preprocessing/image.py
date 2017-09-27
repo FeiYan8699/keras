@@ -534,12 +534,16 @@ class ImageDataGenerator(object):
 
     def flow_from_directory(self, directory,
                             color_mode=None, target_size=None,
-                            image_reader='pil', reader_config={'target_mode':'RGB', 'target_size':(256,256)},
-                            read_formats={'png','jpg','jpeg','bmp'},
+                            image_reader='pil', reader_config=None,
+                            read_formats=None,
                             classes=None, class_mode='categorical',
                             batch_size=32, shuffle=True, seed=None,
                             save_to_dir=None, save_prefix='',
                             save_mode=None, save_format='jpeg'):
+        if reader_config is None:
+            reader_config={'target_mode':'RGB', 'target_size':(256,256)}
+        if read_formats is None:
+            read_formats={'png','jpg','jpeg','bmp'}
         return DirectoryIterator(
             directory, self,
             color_mode=color_mode, target_size=target_size,
