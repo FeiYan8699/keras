@@ -575,7 +575,7 @@ class ImageDataGenerator(object):
         with self.fit_lock:
             try:
                 self.__fitting = nb_iter*generator.batch_size
-                for i in xrange(nb_iter):
+                for i in range(nb_iter):
                     next(generator)
             finally:
                 self.__fitting = False
@@ -591,8 +591,8 @@ class ImageDataGenerator(object):
         with self.fit_lock:
             try:
                 self.__fitting = rounds*X.shape[0]
-                for r in xrange(rounds):
-                    for i in xrange(X.shape[0]):
+                for r in range(rounds):
+                    for i in range(X.shape[0]):
                         self.process(X[i])
             finally:
                 self.__fitting = False
